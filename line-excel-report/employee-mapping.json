@@ -1,0 +1,17 @@
+{
+  "_comment": "LINE UserID と社員名のマッピング設定ファイル",
+  "_how_to_get_user_id": "LINE Webhookのevent.source.userIdで確認できます。n8nのWebhookノードのテスト実行後、受信データのbody.events[0].source.userIdを確認してください",
+  "employees": [
+    {
+      "lineUserId": "Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "name": "田中太郎",
+      "active": true
+    },
+    {
+      "lineUserId": "Uyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "name": "山田花子",
+      "active": true
+    }
+  ],
+  "_note": "このファイルの内容はn8nワークフローの「社員ID変換」ノード内のEMPLOYEE_MAPにも同じく設定してください"
+}

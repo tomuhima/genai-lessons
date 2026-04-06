@@ -1,0 +1,263 @@
+{
+  "name": "LINE日報 → Excel月間稼働表",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "line-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook",
+      "name": "LINE Webhook受信",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// LINEのWebhookからメッセージを取得\nconst body = $input.first().json.body;\n\n// イベントが存在しない場合はスキップ\nif (!body.events || body.events.length === 0) {\n  return [];\n}\n\nconst results = [];\n\nfor (const event of body.events) {\n  // テキストメッセージのみ処理\n  if (event.type !== 'message' || event.message.type !== 'text') {\n    continue;\n  }\n\n  const text = event.message.text;\n  const userId = event.source.userId;\n  const replyToken = event.replyToken;\n\n  // 「日報」で始まるメッセージのみ処理\n  if (!text.startsWith('日報')) {\n    continue;\n  }\n\n  // 各フィールドを正規表現で抽出\n  const extract = (label, str) => {\n    const match = str.match(new RegExp(label + '[：:]\\\\s*(.+)'));\n    return match ? match[1].trim() : null;\n  };\n\n  const date        = extract('日付', text);\n  const companyName = extract('会社名', text);\n  const propertyName = extract('物件名', text);\n  const startTime   = extract('開始', text);\n  const endTime     = extract('終了', text);\n  const breakMin    = extract('休憩', text);\n  const workContent = extract('作業内容', text);\n\n  // 必須フィールドチェック\n  const missing = [];\n  if (!date)         missing.push('日付');\n  if (!companyName)  missing.push('会社名');\n  if (!propertyName) missing.push('物件名');\n  if (!startTime)    missing.push('開始');\n  if (!endTime)      missing.push('終了');\n  if (!breakMin)     missing.push('休憩');\n  if (!workContent)  missing.push('作業内容');\n\n  if (missing.length > 0) {\n    results.push({\n      json: {\n        valid: false,\n        replyToken,\n        userId,\n        errorMessage: `以下の項目が不足しています：\\n${missing.join('、')}\\n\\n正しいフォーマット：\\n日報\\n日付：YYYY/MM/DD\\n会社名：〇〇株式会社\\n物件名：〇〇ビル\\n開始：09:00\\n終了：18:00\\n休憩：60\\n作業内容：作業の内容`\n      }\n    });\n    continue;\n  }\n\n  // 実働時間を計算\n  const [sh, sm] = startTime.split(':').map(Number);\n  const [eh, em] = endTime.split(':').map(Number);\n  const totalMin = (eh * 60 + em) - (sh * 60 + sm) - parseInt(breakMin);\n  const workH = Math.floor(totalMin / 60);\n  const workM = totalMin % 60;\n  const workingTime = `${workH}:${String(workM).padStart(2, '0')}`;\n\n  // 対象ファイル名（年ごと）\n  const year = date.split('/')[0];\n  const fileName = `稼働表_${year}年.xlsx`;\n\n  results.push({\n    json: {\n      valid: true,\n      replyToken,\n      userId,\n      date,\n      companyName,\n      propertyName,\n      startTime,\n      endTime,\n      breakMin: parseInt(breakMin),\n      workContent,\n      workingTime,\n      fileName\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "node-parse-message",
+      "name": "LINEメッセージ解析",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.valid }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "node-check-valid",
+      "name": "フォーマットチェック",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// =============================\n// 社員マスター設定（LINE UserID → 社員名）\n// 社員が増えた場合はここに追加してください\n// =============================\nconst EMPLOYEE_MAP = {\n  \"Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\": \"田中太郎\",\n  \"Uyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\": \"山田花子\"\n  // 追加例:\n  // \"Uzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\": \"鈴木一郎\",\n};\n// =============================\n\nconst userId = $json.userId;\nconst employeeName = EMPLOYEE_MAP[userId];\n\nif (!employeeName) {\n  return [{\n    json: {\n      ...$json,\n      valid: false,\n      errorMessage: `登録されていないLINEアカウントです。\\n管理者に連絡してください。\\n(UserID: ${userId})`\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    ...$json,\n    employeeName\n  }\n}];"
+      },
+      "id": "node-map-employee",
+      "name": "社員ID変換",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 180]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.valid }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "node-check-employee",
+      "name": "社員確認",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1120, 180]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "mode": "expression",
+          "value": "={{ $json.fileName }}"
+        },
+        "options": {
+          "parentFolderId": "/稼働表"
+        }
+      },
+      "id": "node-onedrive-download",
+      "name": "OneDrive: Excelダウンロード",
+      "type": "n8n-nodes-base.microsoftOneDrive",
+      "typeVersion": 1,
+      "position": [1340, 100],
+      "credentials": {
+        "microsoftOneDriveOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Microsoft OneDrive"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ExcelJSを使用してExcelファイルに行を追加\n// ※ 事前にn8nサーバーで `npm install exceljs` が必要です\nconst ExcelJS = require('exceljs');\n\nconst reportData = $('社員確認').first().json;\nconst binaryData = $input.first().binary?.data;\n\nconst workbook = new ExcelJS.Workbook();\n\n// ファイルが存在する場合は読み込み、存在しない場合は新規作成\nif (binaryData) {\n  const buffer = Buffer.from(binaryData.data, 'base64');\n  await workbook.xlsx.load(buffer);\n} else {\n  // 新規ファイル作成（ファイルが存在しない年の初回）\n  console.log(`新規ファイル作成: ${reportData.fileName}`);\n}\n\n// 社員シートを取得または作成\nlet sheet = workbook.getWorksheet(reportData.employeeName);\nif (!sheet) {\n  sheet = workbook.addWorksheet(reportData.employeeName);\n\n  // ヘッダー行を追加（スタイル付き）\n  const headerRow = sheet.addRow([\n    '日付', '会社名', '物件名', '開始時間', '終了時間', '休憩(分)', '実働時間', '作業内容'\n  ]);\n\n  // ヘッダースタイル設定\n  headerRow.eachCell((cell) => {\n    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };\n    cell.fill = {\n      type: 'pattern',\n      pattern: 'solid',\n      fgColor: { argb: 'FF2F5496' }\n    };\n    cell.alignment = { horizontal: 'center', vertical: 'middle' };\n    cell.border = {\n      top: { style: 'thin' },\n      left: { style: 'thin' },\n      bottom: { style: 'thin' },\n      right: { style: 'thin' }\n    };\n  });\n\n  // 列幅設定\n  sheet.getColumn(1).width = 12;  // 日付\n  sheet.getColumn(2).width = 20;  // 会社名\n  sheet.getColumn(3).width = 25;  // 物件名\n  sheet.getColumn(4).width = 10;  // 開始時間\n  sheet.getColumn(5).width = 10;  // 終了時間\n  sheet.getColumn(6).width = 10;  // 休憩(分)\n  sheet.getColumn(7).width = 10;  // 実働時間\n  sheet.getColumn(8).width = 40;  // 作業内容\n}\n\n// 同じ日付のレコードが既に存在するか確認\nconst existingRow = sheet.getRows(2, sheet.lastRow?.number ?? 1)?.find(row =>\n  row.getCell(1).value === reportData.date\n);\n\nif (existingRow) {\n  // 既存行を更新\n  existingRow.getCell(1).value = reportData.date;\n  existingRow.getCell(2).value = reportData.companyName;\n  existingRow.getCell(3).value = reportData.propertyName;\n  existingRow.getCell(4).value = reportData.startTime;\n  existingRow.getCell(5).value = reportData.endTime;\n  existingRow.getCell(6).value = reportData.breakMin;\n  existingRow.getCell(7).value = reportData.workingTime;\n  existingRow.getCell(8).value = reportData.workContent;\n} else {\n  // 新しい行を追加\n  const newRow = sheet.addRow([\n    reportData.date,\n    reportData.companyName,\n    reportData.propertyName,\n    reportData.startTime,\n    reportData.endTime,\n    reportData.breakMin,\n    reportData.workingTime,\n    reportData.workContent\n  ]);\n\n  // 罫線設定\n  newRow.eachCell((cell) => {\n    cell.border = {\n      top: { style: 'thin' },\n      left: { style: 'thin' },\n      bottom: { style: 'thin' },\n      right: { style: 'thin' }\n    };\n    cell.alignment = { vertical: 'middle' };\n  });\n}\n\n// バッファに書き出し\nconst buffer = await workbook.xlsx.writeBuffer();\nconst base64 = Buffer.from(buffer).toString('base64');\n\nreturn [{\n  json: reportData,\n  binary: {\n    data: {\n      data: base64,\n      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',\n      fileName: reportData.fileName,\n      fileExtension: 'xlsx'\n    }\n  }\n}];"
+      },
+      "id": "node-edit-excel",
+      "name": "Excel編集（ExcelJS）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 100]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "name": "={{ $json.fileName }}",
+        "driveId": {
+          "mode": "id",
+          "value": "me"
+        },
+        "folderId": {
+          "mode": "expression",
+          "value": "/稼働表"
+        },
+        "binaryPropertyName": "data",
+        "options": {
+          "conflictBehavior": "replace"
+        }
+      },
+      "id": "node-onedrive-upload",
+      "name": "OneDrive: Excelアップロード",
+      "type": "n8n-nodes-base.microsoftOneDrive",
+      "typeVersion": 1,
+      "position": [1780, 100],
+      "credentials": {
+        "microsoftOneDriveOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Microsoft OneDrive"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 成功時のLINE返信メッセージ作成\nconst d = $('社員確認').first().json;\n\nreturn [{\n  json: {\n    replyToken: d.replyToken,\n    messages: [\n      {\n        type: 'text',\n        text: `✅ 日報を記録しました\\n\\n👷 ${d.employeeName}\\n📅 ${d.date}\\n🏢 ${d.companyName}\\n🏗️ ${d.propertyName}\\n⏰ ${d.startTime} ～ ${d.endTime}（休憩${d.breakMin}分）\\n⚡ 実働：${d.workingTime}\\n📝 ${d.workContent}`\n      }\n    ]\n  }\n}];"
+      },
+      "id": "node-success-message",
+      "name": "成功メッセージ作成",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// エラー時（フォーマット不正 or 未登録ユーザー）のLINE返信\nconst d = $input.first().json;\n\nreturn [{\n  json: {\n    replyToken: d.replyToken,\n    messages: [\n      {\n        type: 'text',\n        text: `❌ ${d.errorMessage}`\n      }\n    ]\n  }\n}];"
+      },
+      "id": "node-error-message",
+      "name": "エラーメッセージ作成",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 480]
+    },
+    {
+      "parameters": {
+        "url": "https://api.line.me/v2/bot/message/reply",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ replyToken: $json.replyToken, messages: $json.messages }) }}",
+        "options": {}
+      },
+      "id": "node-line-reply",
+      "name": "LINE返信送信",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2220, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "LINE_CHANNEL_ACCESS_TOKEN",
+          "name": "LINE Channel Access Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {}
+      },
+      "id": "node-webhook-response",
+      "name": "Webhookレスポンス（200 OK）",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2440, 300]
+    }
+  ],
+  "connections": {
+    "LINE Webhook受信": {
+      "main": [
+        [{ "node": "LINEメッセージ解析", "type": "main", "index": 0 }]
+      ]
+    },
+    "LINEメッセージ解析": {
+      "main": [
+        [{ "node": "フォーマットチェック", "type": "main", "index": 0 }]
+      ]
+    },
+    "フォーマットチェック": {
+      "main": [
+        [{ "node": "社員ID変換", "type": "main", "index": 0 }],
+        [{ "node": "エラーメッセージ作成", "type": "main", "index": 0 }]
+      ]
+    },
+    "社員ID変換": {
+      "main": [
+        [{ "node": "社員確認", "type": "main", "index": 0 }]
+      ]
+    },
+    "社員確認": {
+      "main": [
+        [{ "node": "OneDrive: Excelダウンロード", "type": "main", "index": 0 }],
+        [{ "node": "エラーメッセージ作成", "type": "main", "index": 0 }]
+      ]
+    },
+    "OneDrive: Excelダウンロード": {
+      "main": [
+        [{ "node": "Excel編集（ExcelJS）", "type": "main", "index": 0 }]
+      ]
+    },
+    "Excel編集（ExcelJS）": {
+      "main": [
+        [{ "node": "OneDrive: Excelアップロード", "type": "main", "index": 0 }]
+      ]
+    },
+    "OneDrive: Excelアップロード": {
+      "main": [
+        [{ "node": "成功メッセージ作成", "type": "main", "index": 0 }]
+      ]
+    },
+    "成功メッセージ作成": {
+      "main": [
+        [{ "node": "LINE返信送信", "type": "main", "index": 0 }]
+      ]
+    },
+    "エラーメッセージ作成": {
+      "main": [
+        [{ "node": "LINE返信送信", "type": "main", "index": 0 }]
+      ]
+    },
+    "LINE返信送信": {
+      "main": [
+        [{ "node": "Webhookレスポンス（200 OK）", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "tags": ["LINE", "Excel", "稼働表", "日報"]
+}
