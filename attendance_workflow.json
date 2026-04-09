@@ -1,0 +1,152 @@
+{
+  "name": "勤怠管理ワークフロー",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "line-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-line-webhook",
+      "name": "LINE Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// LINEメッセージを受信して必要な情報を抽出\nconst body = $input.item.json.body;\nconst events = body.events || [];\n\nif (events.length === 0) {\n  return [{ json: { skip: true } }];\n}\n\nconst event = events[0];\nconst userId = event.source?.userId || '';\nconst messageText = event.message?.text || '';\nconst replyToken = event.replyToken || '';\n\nreturn [{\n  json: {\n    userId,\n    messageText,\n    replyToken,\n    eventType: event.type\n  }\n}];"
+      },
+      "id": "node-line-message-receive",
+      "name": "LINEメッセージ受信",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 社員IDマッピングテーブル\n// 新しい社員を追加する場合はここに追記してください\nconst employeeMap = [\n  {\n    userId: 'Uc1e1e958fb952752c3d34628a17585a1',\n    employeeName: '野添優',\n    fileName: '稼働表_野添優.xlsx'\n  }\n  // 他の社員を追加する場合はここに追記\n  // 例:\n  // {\n  //   userId: 'U xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',\n  //   employeeName: '氏名',\n  //   fileName: '稼働表_氏名.xlsx'\n  // }\n];\n\nconst userId = $input.item.json.userId;\nconst employee = employeeMap.find(e => e.userId === userId);\n\nif (!employee) {\n  return [{\n    json: {\n      valid: false,\n      errorMessage: '登録されていないLINEアカウント',\n      userId\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    valid: true,\n    userId: employee.userId,\n    employeeName: employee.employeeName,\n    fileName: employee.fileName,\n    replyToken: $input.item.json.replyToken,\n    messageText: $input.item.json.messageText\n  }\n}];"
+      },
+      "id": "node-employee-id-convert",
+      "name": "社員ID変換",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-flow-management",
+      "name": "フローマネージメント",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// エラーメッセージを送信するためのペイロードを作成\nconst errorMessage = $input.item.json.errorMessage || 'エラーが発生しました';\n\nreturn [{\n  json: {\n    replyToken: $input.item.json.replyToken,\n    messages: [\n      {\n        type: 'text',\n        text: `エラー: ${errorMessage}`\n      }\n    ]\n  }\n}];"
+      },
+      "id": "node-error-message",
+      "name": "エラーメッセージ作成",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 勤怠処理のメインロジック\nconst employeeName = $input.item.json.employeeName;\nconst fileName = $input.item.json.fileName;\nconst messageText = $input.item.json.messageText;\n\n// メッセージ内容に基づいて処理を分岐\nlet action = 'unknown';\nif (messageText.includes('出勤') || messageText.includes('おはよう')) {\n  action = 'clockIn';\n} else if (messageText.includes('退勤') || messageText.includes('お疲れ')) {\n  action = 'clockOut';\n}\n\nreturn [{\n  json: {\n    employeeName,\n    fileName,\n    action,\n    replyToken: $input.item.json.replyToken,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "node-attendance-process",
+      "name": "勤怠処理",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 300]
+    }
+  ],
+  "connections": {
+    "LINE Webhook": {
+      "main": [
+        [
+          {
+            "node": "LINEメッセージ受信",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LINEメッセージ受信": {
+      "main": [
+        [
+          {
+            "node": "社員ID変換",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "社員ID変換": {
+      "main": [
+        [
+          {
+            "node": "フローマネージメント",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "フローマネージメント": {
+      "main": [
+        [
+          {
+            "node": "勤怠処理",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "エラーメッセージ作成",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "1.0.0",
+  "triggerCount": 1,
+  "updatedAt": "2026-04-09T00:00:00.000Z",
+  "createdAt": "2026-04-09T00:00:00.000Z"
+}
