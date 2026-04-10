@@ -28,6 +28,9 @@
       "parameters": {
         "jsCode": "// 社員IDマッピングテーブル\n// 新しい社員を追加する場合はここに追記してください\nconst employeeMap = [\n  {\n    userId: 'Uc1e1e958fb952752c3d34628a17585a1',\n    employeeName: '野添優',\n    fileName: '稼働表_野添優.xlsx'\n  }\n  // 他の社員を追加する場合はここに追記\n  // 例:\n  // {\n  //   userId: 'U xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',\n  //   employeeName: '氏名',\n  //   fileName: '稼働表_氏名.xlsx'\n  // }\n];\n\nconst userId = $input.item.json.userId;\nconst employee = employeeMap.find(e => e.userId === userId);\n\nif (!employee) {\n  return [{\n    json: {\n      valid: false,\n      errorMessage: '登録されていないLINEアカウント',\n      userId\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    valid: true,\n    userId: employee.userId,\n    employeeName: employee.employeeName,\n    fileName: employee.fileName,\n    replyToken: $input.item.json.replyToken,\n    messageText: $input.item.json.messageText\n  }\n}];"
       },
+      "parameters": {
+        "jsCode": "// =============================\n// 社員マスター設定（LINE UserID → 社員名）\n// 社員が増えた場合はここに追加してください\n// =============================\nconst EMPLOYEE_MAP = {\n  \"Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\": \"田中太郎\",\n  \"Uyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\": \"山田花子\",\n  \"Uc1e1e958fb952752c3d34628a17585a1\": \"野添優\"\n  // 追加例:\n  // \"Uzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\": \"鈴木一郎\",\n};\n// =============================\n\nconst userId = $json.userId;\nconst employeeName = EMPLOYEE_MAP[userId];\n\nif (!employeeName) {\n  return [{\n    json: {\n      ...$json,\n      valid: false,\n      errorMessage: `登録されていないLINEアカウントです。\\n管理者に連絡してください。\\n(UserID: ${userId})`\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    ...$json,\n    employeeName\n  }\n}];"
+      },
       "id": "node-employee-id-convert",
       "name": "社員ID変換",
       "type": "n8n-nodes-base.code",
