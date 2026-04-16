@@ -18,13 +18,15 @@ OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__))
 # ============================================================
 # マスターデータ
 # ============================================================
+
+# (名前, 種別, インボイス登録)
 VENDORS = [
-    ("梶原通信",               "個人"),
-    ("秀電工",                 "個人"),
-    ("井本貴史",               "個人"),
-    ("LLS電気",                "個人"),
-    ("株式会社トラストテクノス", "法人"),
-    ("株式会社RISE",           "法人"),
+    ("梶原通信",               "個人", "あり"),
+    ("秀電工",                 "個人", "あり"),
+    ("井本貴史",               "個人", "なし"),
+    ("LLS電気",                "個人", "あり"),
+    ("株式会社トラストテクノス", "法人", "あり"),
+    ("株式会社RISE",           "法人", "あり"),
 ]
 
 CLIENTS = [
@@ -163,25 +165,28 @@ def create_subcontractor_sheet(wb):
     ws = wb.create_sheet("外注管理")
 
     headers = [
-        ("No",          4),
-        ("登録日",      12),
-        ("業者名",      22),
-        ("種別",        8),
-        ("案件名",      20),
+        ("No",           4),
+        ("登録日",       12),
+        ("業者名",       22),
+        ("種別",         8),
+        ("インボイス",   10),
+        ("案件名",       20),
         ("請求額(税抜)", 14),
-        ("消費税(10%)", 13),
-        ("合計(税込)",  14),
-        ("請求日",      12),
-        ("支払期限",    12),
-        ("支払日",      12),
-        ("支払額",      13),
-        ("状況",        10),
+        ("消費税(10%)",  13),
+        ("合計(税込)",   14),
+        ("請求日",       12),
+        ("支払期限",     12),
+        ("支払日",       12),
+        ("支払額",       13),
+        ("状況",         10),
     ]
     apply_headers(ws, headers, row=1, color="375623")
 
     DATA_ROWS = 200
     vendor_names = [v[0] for v in VENDORS]
-    vendor_type_map = {v[0]: v[1] for v in VENDORS}
+
+    # インボイスなし警告色
+    orange_fill = PatternFill("solid", fgColor="FFE4B5")
 
     for i in range(DATA_ROWS):
         r = i + 2
@@ -189,53 +194,61 @@ def create_subcontractor_sheet(wb):
         data_row_style(ws, r, len(headers), alt)
         ws.cell(r, 1).value = f'=IF(C{r}<>"",ROW()-1,"")'
         ws.cell(r, 1).alignment = Alignment(horizontal="center", vertical="center")
-        # 種別：業者名から自動判定（マスターシートを使用）
+        # 種別：マスターから自動取得（A列=業者名, B列=種別）
         ws.cell(r, 4).value = f'=IF(C{r}="","",IFERROR(VLOOKUP(C{r},マスター!A:B,2,0),""))'
         ws.cell(r, 4).alignment = Alignment(horizontal="center", vertical="center")
+        # インボイス：マスターから自動取得（A列=業者名, C列=インボイス）
+        ws.cell(r, 5).value = f'=IF(C{r}="","",IFERROR(VLOOKUP(C{r},マスター!A:C,3,0),""))'
+        ws.cell(r, 5).alignment = Alignment(horizontal="center", vertical="center")
         # 消費税自動計算
-        ws.cell(r, 7).value = f'=IF(F{r}="","",F{r}*0.1)'
-        ws.cell(r, 7).number_format = '#,##0'
-        # 合計自動計算
-        ws.cell(r, 8).value = f'=IF(F{r}="","",F{r}+G{r})'
+        ws.cell(r, 8).value = f'=IF(G{r}="","",G{r}*0.1)'
         ws.cell(r, 8).number_format = '#,##0'
-        # 支払期限：月末締め翌月末（請求日から計算）
-        ws.cell(r, 10).value = f'=IF(I{r}="","",EOMONTH(I{r},1))'
-        ws.cell(r, 10).number_format = "YYYY/MM/DD"
+        # 合計自動計算
+        ws.cell(r, 9).value = f'=IF(G{r}="","",G{r}+H{r})'
+        ws.cell(r, 9).number_format = '#,##0'
+        # 支払期限：月末締め翌月末
+        ws.cell(r, 11).value = f'=IF(J{r}="","",EOMONTH(J{r},1))'
+        ws.cell(r, 11).number_format = "YYYY/MM/DD"
         # 状況：支払日があれば支払済
-        ws.cell(r, 13).value = f'=IF(C{r}="","",IF(K{r}<>"","支払済","未払"))'
-        ws.cell(r, 13).alignment = Alignment(horizontal="center", vertical="center")
+        ws.cell(r, 14).value = f'=IF(C{r}="","",IF(L{r}<>"","支払済","未払"))'
+        ws.cell(r, 14).alignment = Alignment(horizontal="center", vertical="center")
 
-        for col in [2, 9, 11]:
+        for col in [2, 10, 12]:
             ws.cell(r, col).number_format = "YYYY/MM/DD"
-        for col in [6, 12]:
+        for col in [7, 13]:
             ws.cell(r, col).number_format = '#,##0'
 
     add_dropdown(ws, "C", 2, DATA_ROWS + 1, vendor_names)
-    freeze_and_filter(ws, "B2", f"A1:M{DATA_ROWS + 1}")
+    freeze_and_filter(ws, "B2", f"A1:N{DATA_ROWS + 1}")
 
     # 条件付き書式（未払は赤・支払済は緑）
     red_fill = PatternFill("solid", fgColor="FFE0E0")
     green_fill = PatternFill("solid", fgColor="E2EFDA")
     ws.conditional_formatting.add(
-        f"M2:M{DATA_ROWS + 1}",
-        FormulaRule(formula=['M2="未払"'], fill=red_fill)
+        f"N2:N{DATA_ROWS + 1}",
+        FormulaRule(formula=['N2="未払"'], fill=red_fill)
     )
     ws.conditional_formatting.add(
-        f"M2:M{DATA_ROWS + 1}",
-        FormulaRule(formula=['M2="支払済"'], fill=green_fill)
+        f"N2:N{DATA_ROWS + 1}",
+        FormulaRule(formula=['N2="支払済"'], fill=green_fill)
+    )
+    # インボイスなしは橙色で警告
+    ws.conditional_formatting.add(
+        f"E2:E{DATA_ROWS + 1}",
+        FormulaRule(formula=['E2="なし"'], fill=orange_fill)
     )
 
-    # 合計行
+    # 合計行（列番号はヘッダー追加後: G=7,H=8,I=9,M=13,N=14）
     sum_row = DATA_ROWS + 2
-    ws.cell(sum_row, 5).value = "合計"
-    ws.cell(sum_row, 5).font = Font(bold=True)
-    for col, label in [(6, "請求額"), (7, "消費税"), (8, "合計"), (12, "支払額")]:
-        ws.cell(sum_row, col).value = f"=SUMIF(M2:M{DATA_ROWS+1},\"*\",{get_column_letter(col)}2:{get_column_letter(col)}{DATA_ROWS+1})"
+    ws.cell(sum_row, 6).value = "合計"
+    ws.cell(sum_row, 6).font = Font(bold=True)
+    for col in [7, 8, 9, 13]:  # 請求額,消費税,合計,支払額
+        ws.cell(sum_row, col).value = f"=SUM({get_column_letter(col)}2:{get_column_letter(col)}{DATA_ROWS+1})"
         ws.cell(sum_row, col).number_format = '#,##0'
         ws.cell(sum_row, col).font = Font(bold=True)
     # 未払合計
-    ws.cell(sum_row, 13).value = f'=COUNTIF(M2:M{DATA_ROWS+1},"未払")&"件未払"'
-    ws.cell(sum_row, 13).font = Font(bold=True, color="CC0000")
+    ws.cell(sum_row, 14).value = f'=COUNTIF(N2:N{DATA_ROWS+1},"未払")&"件未払"'
+    ws.cell(sum_row, 14).font = Font(bold=True, color="CC0000")
 
 
 def create_sales_sheet(wb):
@@ -457,22 +470,24 @@ def create_master_sheet(wb):
     """マスターシート（非表示）"""
     ws = wb.create_sheet("マスター")
 
-    # 業者マスター（A:B）
+    # 業者マスター（A:C）
     ws.cell(1, 1, "業者名").font = Font(bold=True)
     ws.cell(1, 2, "種別").font = Font(bold=True)
-    for i, (name, vendor_type) in enumerate(VENDORS, 2):
+    ws.cell(1, 3, "インボイス").font = Font(bold=True)
+    for i, (name, vendor_type, invoice) in enumerate(VENDORS, 2):
         ws.cell(i, 1, name)
         ws.cell(i, 2, vendor_type)
+        ws.cell(i, 3, invoice)
 
-    # 得意先マスター（D列）
-    ws.cell(1, 4, "得意先名").font = Font(bold=True)
+    # 得意先マスター（E列）
+    ws.cell(1, 5, "得意先名").font = Font(bold=True)
     for i, name in enumerate(CLIENTS, 2):
-        ws.cell(i, 4, name)
+        ws.cell(i, 5, name)
 
-    # 経費種類マスター（F列）
-    ws.cell(1, 6, "経費種類").font = Font(bold=True)
+    # 経費種類マスター（G列）
+    ws.cell(1, 7, "経費種類").font = Font(bold=True)
     for i, cat in enumerate(EXPENSE_CATEGORIES, 2):
-        ws.cell(i, 6, cat)
+        ws.cell(i, 7, cat)
 
     ws.sheet_state = "hidden"
 
@@ -537,7 +552,7 @@ def create_annual_template():
     ws2 = wb.create_sheet("業者別外注費")
     vendor_headers = [("業者名", 24)] + [(m, 12) for m in MONTHS] + [("合計", 14)]
     apply_headers(ws2, vendor_headers, row=1, color="375623")
-    for i, (name, _) in enumerate(VENDORS):
+    for i, (name, *_) in enumerate(VENDORS):
         r = i + 2
         alt = (i % 2 == 1)
         data_row_style(ws2, r, len(vendor_headers), alt)
