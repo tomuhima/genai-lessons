@@ -69,7 +69,7 @@ FUEL_RATES = {
 }
 
 # 複数人対応（人員列を追加）
-MULTI_PERSON_NAMES = {"梶原通信"}
+MULTI_PERSON_NAMES = {"梶原通信", "LLS電気", "株式会社トラストテクノス"}
 
 SHIFT_TYPES = ["昼勤", "夜勤", "半日（午前）", "半日（午後）"]
 
