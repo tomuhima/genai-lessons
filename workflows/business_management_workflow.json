@@ -1,0 +1,374 @@
+{
+  "name": "経営管理システム",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "business-management",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 400],
+      "id": "bm-webhook-001",
+      "webhookId": "business-management"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "options": {}
+      },
+      "name": "Webhook応答",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [460, 240],
+      "id": "bm-respond-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\nif (!body.events || body.events.length === 0) return [];\n\nconst results = [];\nfor (const event of body.events) {\n  if (event.type !== 'message') continue;\n  const replyToken = event.replyToken;\n  const userId = event.source.userId;\n  const msgType = event.message.type;\n\n  const now = new Date();\n  const year = now.getFullYear();\n  const month = now.getMonth() + 1;\n  const day = now.getDate();\n  const today = `${year}/${String(month).padStart(2,'0')}/${String(day).padStart(2,'0')}`;\n  const fileName = `経営管理_${year}年${month}月.xlsx`;\n\n  // 画像メッセージ（レシート）\n  if (msgType === 'image') {\n    results.push({ json: { valid: true, messageType: 'image', messageId: event.message.id, replyToken, userId, fileName, year, month } });\n    continue;\n  }\n\n  if (msgType !== 'text') continue;\n  const text = event.message.text.trim();\n\n  const extract = (label, str) => {\n    const m = str.match(new RegExp(label + '[：:]\\\\s*(.+)'));\n    return m ? m[1].trim() : null;\n  };\n  const toNum = (s) => s ? parseInt(s.replace(/[,，￥¥\\s]/g, '')) || 0 : 0;\n  const replyError = (msg) => results.push({ json: { valid: false, replyToken, userId, errorMessage: msg } });\n\n  // 照会系コマンド\n  if (text === '未払い確認') {\n    results.push({ json: { valid: true, messageType: 'query_unpaid', replyToken, userId, fileName, year, month } });\n    continue;\n  }\n  if (text === '未入金確認') {\n    results.push({ json: { valid: true, messageType: 'query_unreceived', replyToken, userId, fileName, year, month } });\n    continue;\n  }\n  if (text === '今月サマリー') {\n    results.push({ json: { valid: true, messageType: 'query_summary', replyToken, userId, fileName, year, month } });\n    continue;\n  }\n\n  // 経費\n  if (text.startsWith('経費')) {\n    const category = extract('種類', text);\n    const amount = extract('金額', text);\n    const store = extract('店名', text);\n    const missing = [];\n    if (!category) missing.push('種類');\n    if (!amount) missing.push('金額');\n    if (!store) missing.push('店名');\n    if (missing.length > 0) { replyError(`以下の項目が不足しています：\\n${missing.join('、')}`); continue; }\n    results.push({ json: {\n      valid: true, messageType: 'expense', replyToken, userId, fileName, year, month,\n      date: extract('日付', text) || today,\n      category,\n      paymentMethod: extract('支払方法', text) || '現金',\n      store,\n      project: extract('案件', text) || '',\n      amount: toNum(amount),\n      note: extract('備考', text) || ''\n    }});\n    continue;\n  }\n\n  // 外注請求\n  if (text.startsWith('外注請求')) {\n    const vendor = extract('業者', text);\n    const project = extract('案件', text);\n    const amount = extract('金額', text);\n    const missing = [];\n    if (!vendor) missing.push('業者');\n    if (!project) missing.push('案件');\n    if (!amount) missing.push('金額');\n    if (missing.length > 0) { replyError(`以下の項目が不足しています：\\n${missing.join('、')}`); continue; }\n    const amtNum = toNum(amount);\n    const taxRaw = extract('消費税', text);\n    const taxNum = taxRaw ? toNum(taxRaw) : Math.round(amtNum * 0.1);\n    const invDate = extract('請求日', text) || today;\n    results.push({ json: {\n      valid: true, messageType: 'subcontractor_invoice', replyToken, userId, fileName, year, month,\n      registrationDate: invDate, vendor, project,\n      amountExTax: amtNum, tax: taxNum, total: amtNum + taxNum,\n      invoiceDate: invDate\n    }});\n    continue;\n  }\n\n  // 外注支払\n  if (text.startsWith('外注支払')) {\n    const vendor = extract('業者', text);\n    const amount = extract('金額', text);\n    const paymentDate = extract('支払日', text);\n    const missing = [];\n    if (!vendor) missing.push('業者');\n    if (!amount) missing.push('金額');\n    if (!paymentDate) missing.push('支払日');\n    if (missing.length > 0) { replyError(`以下の項目が不足しています：\\n${missing.join('、')}`); continue; }\n    results.push({ json: {\n      valid: true, messageType: 'subcontractor_payment', replyToken, userId, fileName, year, month,\n      vendor, paymentDate, paymentAmount: toNum(amount)\n    }});\n    continue;\n  }\n\n  // 売上\n  if (text.startsWith('売上')) {\n    const client = extract('得意先', text);\n    const project = extract('案件', text);\n    const amount = extract('金額', text);\n    const missing = [];\n    if (!client) missing.push('得意先');\n    if (!project) missing.push('案件');\n    if (!amount) missing.push('金額');\n    if (missing.length > 0) { replyError(`以下の項目が不足しています：\\n${missing.join('、')}`); continue; }\n    const amtNum = toNum(amount);\n    const taxRaw = extract('消費税', text);\n    const taxNum = taxRaw ? toNum(taxRaw) : Math.round(amtNum * 0.1);\n    const invDate = extract('請求日', text) || today;\n    results.push({ json: {\n      valid: true, messageType: 'sales', replyToken, userId, fileName, year, month,\n      registrationDate: invDate, client, project,\n      amountExTax: amtNum, tax: taxNum, total: amtNum + taxNum,\n      invoiceDate: invDate,\n      dueDate: extract('支払期限', text) || ''\n    }});\n    continue;\n  }\n\n  // 入金\n  if (text.startsWith('入金')) {\n    const client = extract('得意先', text);\n    const amount = extract('金額', text);\n    const receivedDate = extract('入金日', text);\n    const missing = [];\n    if (!client) missing.push('得意先');\n    if (!amount) missing.push('金額');\n    if (!receivedDate) missing.push('入金日');\n    if (missing.length > 0) { replyError(`以下の項目が不足しています：\\n${missing.join('、')}`); continue; }\n    results.push({ json: {\n      valid: true, messageType: 'payment_received', replyToken, userId, fileName, year, month,\n      client, receivedDate, receivedAmount: toNum(amount),\n      project: extract('案件', text) || ''\n    }});\n    continue;\n  }\n}\nreturn results;"
+      },
+      "name": "LINEメッセージ解析",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 400],
+      "id": "bm-parse-001"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.valid }}",
+              "value2": true
+            }
+          ]
+        },
+        "options": {
+          "typeValidation": "loose"
+        }
+      },
+      "name": "バリデーション確認",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 400],
+      "id": "bm-valid-001"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{ $json.messageType }}",
+                    "operation": "contains",
+                    "value2": "query"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "fallbackOutput": "extra"
+      },
+      "name": "書込み照会判定",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [900, 320],
+      "id": "bm-switch-001"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/経営管理/月次/{{ $json.fileName }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "options": {}
+      },
+      "name": "月次ファイル情報取得",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 200],
+      "id": "bm-fileinfo-001"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/経営管理/月次/{{ $('LINEメッセージ解析').first().json.fileName }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "options": {}
+      },
+      "name": "月次ファイル情報取得（照会）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 440],
+      "id": "bm-fileinfo-002"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/items/{{ $json.id }}/content",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "name": "ファイル取得（書込み）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 200],
+      "id": "bm-download-001"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/items/{{ $json.id }}/content",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "name": "ファイル取得（照会）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 440],
+      "id": "bm-download-002"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const data = $('LINEメッセージ解析').first().json;\n  try {\n    const workbook = new ExcelJS.Workbook();\n    const buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\n    await workbook.xlsx.load(buffer);\n\n    const toDate = (dateStr) => {\n      const p = dateStr.split('/');\n      return new Date(Date.UTC(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2])));\n    };\n\n    const findLastRow = (sheet, keyCol) => {\n      let last = 1;\n      sheet.eachRow((row, num) => { if (num >= 2 && row.getCell(keyCol).value) last = num; });\n      return last;\n    };\n\n    const mt = data.messageType;\n\n    // ===== 経費 =====\n    if (mt === 'expense') {\n      const sheet = workbook.getWorksheet('経費');\n      if (!sheet) throw new Error('経費シートが見つかりません');\n      const r = findLastRow(sheet, 2) + 1;\n      sheet.getRow(r).getCell(2).value = toDate(data.date);\n      sheet.getRow(r).getCell(2).numFmt = 'YYYY/MM/DD';\n      sheet.getRow(r).getCell(3).value = data.category;\n      sheet.getRow(r).getCell(4).value = data.paymentMethod;\n      sheet.getRow(r).getCell(5).value = data.store;\n      sheet.getRow(r).getCell(6).value = data.project;\n      sheet.getRow(r).getCell(7).value = data.amount;\n      sheet.getRow(r).getCell(7).numFmt = '#,##0';\n      sheet.getRow(r).getCell(8).value = data.note;\n    }\n\n    // ===== 外注請求 =====\n    else if (mt === 'subcontractor_invoice') {\n      const sheet = workbook.getWorksheet('外注管理');\n      if (!sheet) throw new Error('外注管理シートが見つかりません');\n      const r = findLastRow(sheet, 3) + 1;\n      sheet.getRow(r).getCell(2).value = toDate(data.registrationDate);\n      sheet.getRow(r).getCell(2).numFmt = 'YYYY/MM/DD';\n      sheet.getRow(r).getCell(3).value = data.vendor;\n      sheet.getRow(r).getCell(6).value = data.project;\n      sheet.getRow(r).getCell(7).value = data.amountExTax;\n      sheet.getRow(r).getCell(7).numFmt = '#,##0';\n      sheet.getRow(r).getCell(8).value = data.tax;\n      sheet.getRow(r).getCell(8).numFmt = '#,##0';\n      sheet.getRow(r).getCell(9).value = data.total;\n      sheet.getRow(r).getCell(9).numFmt = '#,##0';\n      sheet.getRow(r).getCell(10).value = toDate(data.invoiceDate);\n      sheet.getRow(r).getCell(10).numFmt = 'YYYY/MM/DD';\n    }\n\n    // ===== 外注支払 =====\n    else if (mt === 'subcontractor_payment') {\n      const sheet = workbook.getWorksheet('外注管理');\n      if (!sheet) throw new Error('外注管理シートが見つかりません');\n      let targetRow = null;\n      sheet.eachRow((row, num) => {\n        if (num < 2 || targetRow) return;\n        const vendor = row.getCell(3).value;\n        const statusCell = row.getCell(14).value;\n        const status = (statusCell && typeof statusCell === 'object' && 'result' in statusCell) ? statusCell.result : statusCell;\n        if (vendor === data.vendor && status === '未払') targetRow = row;\n      });\n      if (!targetRow) return [{ json: { valid: false, replyToken: data.replyToken, errorMessage: `${data.vendor}の未払い請求が見つかりません` } }];\n      targetRow.getCell(12).value = toDate(data.paymentDate);\n      targetRow.getCell(12).numFmt = 'YYYY/MM/DD';\n      targetRow.getCell(13).value = data.paymentAmount;\n      targetRow.getCell(13).numFmt = '#,##0';\n    }\n\n    // ===== 売上 =====\n    else if (mt === 'sales') {\n      const sheet = workbook.getWorksheet('売上管理');\n      if (!sheet) throw new Error('売上管理シートが見つかりません');\n      const r = findLastRow(sheet, 3) + 1;\n      sheet.getRow(r).getCell(2).value = toDate(data.registrationDate);\n      sheet.getRow(r).getCell(2).numFmt = 'YYYY/MM/DD';\n      sheet.getRow(r).getCell(3).value = data.client;\n      sheet.getRow(r).getCell(4).value = data.project;\n      sheet.getRow(r).getCell(5).value = data.amountExTax;\n      sheet.getRow(r).getCell(5).numFmt = '#,##0';\n      sheet.getRow(r).getCell(6).value = data.tax;\n      sheet.getRow(r).getCell(6).numFmt = '#,##0';\n      sheet.getRow(r).getCell(7).value = data.total;\n      sheet.getRow(r).getCell(7).numFmt = '#,##0';\n      sheet.getRow(r).getCell(8).value = toDate(data.invoiceDate);\n      sheet.getRow(r).getCell(8).numFmt = 'YYYY/MM/DD';\n      if (data.dueDate) {\n        sheet.getRow(r).getCell(9).value = toDate(data.dueDate);\n        sheet.getRow(r).getCell(9).numFmt = 'YYYY/MM/DD';\n      }\n    }\n\n    // ===== 入金 =====\n    else if (mt === 'payment_received') {\n      const sheet = workbook.getWorksheet('売上管理');\n      if (!sheet) throw new Error('売上管理シートが見つかりません');\n      let targetRow = null;\n      sheet.eachRow((row, num) => {\n        if (num < 2 || targetRow) return;\n        const client = row.getCell(3).value;\n        const statusCell = row.getCell(12).value;\n        const status = (statusCell && typeof statusCell === 'object' && 'result' in statusCell) ? statusCell.result : statusCell;\n        if (client === data.client && status === '未入金') targetRow = row;\n      });\n      if (!targetRow) return [{ json: { valid: false, replyToken: data.replyToken, errorMessage: `${data.client}の未入金請求が見つかりません` } }];\n      targetRow.getCell(10).value = toDate(data.receivedDate);\n      targetRow.getCell(10).numFmt = 'YYYY/MM/DD';\n      targetRow.getCell(11).value = data.receivedAmount;\n      targetRow.getCell(11).numFmt = '#,##0';\n    }\n\n    const outBuffer = await workbook.xlsx.writeBuffer({ useSharedStrings: false });\n    const binaryData = await this.helpers.prepareBinaryData(Buffer.from(outBuffer), data.fileName, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');\n    return [{ json: { ...data, fileId: $input.item.json.fileId, valid: true }, binary: { data: binaryData } }];\n\n  } catch (error) {\n    return [{ json: { valid: false, replyToken: data.replyToken, errorMessage: `処理エラー: ${error.message}` } }];\n  }\n})();"
+      },
+      "name": "Excel書き込み",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 200],
+      "id": "bm-excel-write-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const data = $('LINEメッセージ解析').first().json;\n  try {\n    const workbook = new ExcelJS.Workbook();\n    const buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\n    await workbook.xlsx.load(buffer);\n\n    const fmt = (n) => n ? n.toLocaleString('ja-JP') : '0';\n\n    // ===== 未払い確認 =====\n    if (data.messageType === 'query_unpaid') {\n      const sheet = workbook.getWorksheet('外注管理');\n      const unpaid = [];\n      sheet.eachRow((row, num) => {\n        if (num < 2) return;\n        const vendor = row.getCell(3).value;\n        if (!vendor) return;\n        const statusCell = row.getCell(14).value;\n        const status = (statusCell && typeof statusCell === 'object' && 'result' in statusCell) ? statusCell.result : statusCell;\n        if (status !== '未払') return;\n        const project = row.getCell(6).value || '';\n        const totalCell = row.getCell(9).value;\n        const total = (totalCell && typeof totalCell === 'object' && 'result' in totalCell) ? totalCell.result : totalCell;\n        const limitCell = row.getCell(11).value;\n        const limit = (limitCell && typeof limitCell === 'object' && 'result' in limitCell) ? limitCell.result : limitCell;\n        const limitStr = limit ? `${limit.getUTCFullYear()}/${limit.getUTCMonth()+1}/${limit.getUTCDate()}` : '期限不明';\n        unpaid.push(`${vendor}\\n  ${project}\\n  ¥${fmt(total)}  期限:${limitStr}`);\n      });\n      const msg = unpaid.length > 0\n        ? `【未払い一覧】${data.year}年${data.month}月\\n\\n${unpaid.join('\\n\\n')}\\n\\n合計 ${unpaid.length}件`\n        : `【未払い一覧】${data.year}年${data.month}月\\n\\n未払いはありません`;\n      return [{ json: { replyToken: data.replyToken, replyMessage: msg } }];\n    }\n\n    // ===== 未入金確認 =====\n    if (data.messageType === 'query_unreceived') {\n      const sheet = workbook.getWorksheet('売上管理');\n      const unreceived = [];\n      sheet.eachRow((row, num) => {\n        if (num < 2) return;\n        const client = row.getCell(3).value;\n        if (!client) return;\n        const statusCell = row.getCell(12).value;\n        const status = (statusCell && typeof statusCell === 'object' && 'result' in statusCell) ? statusCell.result : statusCell;\n        if (status !== '未入金') return;\n        const project = row.getCell(4).value || '';\n        const totalCell = row.getCell(7).value;\n        const total = (totalCell && typeof totalCell === 'object' && 'result' in totalCell) ? totalCell.result : totalCell;\n        const dueCell = row.getCell(9).value;\n        const due = dueCell instanceof Date ? `${dueCell.getUTCFullYear()}/${dueCell.getUTCMonth()+1}/${dueCell.getUTCDate()}` : '期限未設定';\n        unreceived.push(`${client}\\n  ${project}\\n  ¥${fmt(total)}  期限:${due}`);\n      });\n      const msg = unreceived.length > 0\n        ? `【未入金一覧】${data.year}年${data.month}月\\n\\n${unreceived.join('\\n\\n')}\\n\\n合計 ${unreceived.length}件`\n        : `【未入金一覧】${data.year}年${data.month}月\\n\\n未入金はありません`;\n      return [{ json: { replyToken: data.replyToken, replyMessage: msg } }];\n    }\n\n    // ===== 今月サマリー =====\n    if (data.messageType === 'query_summary') {\n      let salesTotal = 0, receivedTotal = 0, unreceived = 0;\n      let subTotal = 0, paidTotal = 0, unpaidTotal = 0;\n      let expenseTotal = 0;\n\n      const salesSheet = workbook.getWorksheet('売上管理');\n      salesSheet.eachRow((row, num) => {\n        if (num < 2) return;\n        if (!row.getCell(3).value) return;\n        const totalCell = row.getCell(7).value;\n        const total = (totalCell && typeof totalCell === 'object' && 'result' in totalCell) ? totalCell.result : (totalCell || 0);\n        const statusCell = row.getCell(12).value;\n        const status = (statusCell && typeof statusCell === 'object' && 'result' in statusCell) ? statusCell.result : statusCell;\n        salesTotal += total || 0;\n        if (status === '入金済') receivedTotal += (row.getCell(11).value || 0);\n        if (status === '未入金') unreceived += total || 0;\n      });\n\n      const subSheet = workbook.getWorksheet('外注管理');\n      subSheet.eachRow((row, num) => {\n        if (num < 2) return;\n        if (!row.getCell(3).value) return;\n        const totalCell = row.getCell(9).value;\n        const total = (totalCell && typeof totalCell === 'object' && 'result' in totalCell) ? totalCell.result : (totalCell || 0);\n        const statusCell = row.getCell(14).value;\n        const status = (statusCell && typeof statusCell === 'object' && 'result' in statusCell) ? statusCell.result : statusCell;\n        subTotal += total || 0;\n        if (status === '支払済') paidTotal += (row.getCell(13).value || 0);\n        if (status === '未払') unpaidTotal += total || 0;\n      });\n\n      const expSheet = workbook.getWorksheet('経費');\n      expSheet.eachRow((row, num) => {\n        if (num < 2) return;\n        expenseTotal += row.getCell(7).value || 0;\n      });\n\n      const gross = salesTotal - subTotal - expenseTotal;\n      const msg = `【今月サマリー】${data.year}年${data.month}月\\n\\n` +\n        `■ 売上\\n  請求済  ¥${fmt(salesTotal)}\\n  入金済  ¥${fmt(receivedTotal)}\\n  未入金  ¥${fmt(unreceived)}\\n\\n` +\n        `■ 外注費\\n  請求受取  ¥${fmt(subTotal)}\\n  支払済  ¥${fmt(paidTotal)}\\n  未払い  ¥${fmt(unpaidTotal)}\\n\\n` +\n        `■ 経費\\n  合計  ¥${fmt(expenseTotal)}\\n\\n` +\n        `■ 粗利（概算）\\n  ¥${fmt(gross)}`;\n      return [{ json: { replyToken: data.replyToken, replyMessage: msg } }];\n    }\n\n    return [{ json: { replyToken: data.replyToken, replyMessage: '不明なコマンドです' } }];\n  } catch (error) {\n    return [{ json: { replyToken: data.replyToken, replyMessage: `エラー: ${error.message}` } }];\n  }\n})();"
+      },
+      "name": "照会処理",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 440],
+      "id": "bm-query-001"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/items/{{ $json.fileId }}/content",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "アップロード",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1780, 200],
+      "id": "bm-upload-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('LINEメッセージ解析').first().json;\nconst mt = data.messageType;\nconst msgs = {\n  expense:                `✅ 経費を記録しました\\n\\n日付: ${data.date}\\n種類: ${data.category}\\n支払方法: ${data.paymentMethod}\\n店名: ${data.store}\\n金額: ¥${(data.amount||0).toLocaleString('ja-JP')}`,\n  subcontractor_invoice:  `✅ 外注請求を記録しました\\n\\n業者: ${data.vendor}\\n案件: ${data.project}\\n請求額: ¥${(data.amountExTax||0).toLocaleString('ja-JP')}\\n消費税: ¥${(data.tax||0).toLocaleString('ja-JP')}\\n合計: ¥${(data.total||0).toLocaleString('ja-JP')}\\n請求日: ${data.invoiceDate}`,\n  subcontractor_payment:  `✅ 外注支払を記録しました\\n\\n業者: ${data.vendor}\\n支払日: ${data.paymentDate}\\n支払額: ¥${(data.paymentAmount||0).toLocaleString('ja-JP')}`,\n  sales:                  `✅ 売上を記録しました\\n\\n得意先: ${data.client}\\n案件: ${data.project}\\n請求額: ¥${(data.amountExTax||0).toLocaleString('ja-JP')}\\n消費税: ¥${(data.tax||0).toLocaleString('ja-JP')}\\n合計: ¥${(data.total||0).toLocaleString('ja-JP')}\\n請求日: ${data.invoiceDate}`,\n  payment_received:       `✅ 入金を記録しました\\n\\n得意先: ${data.client}\\n入金日: ${data.receivedDate}\\n入金額: ¥${(data.receivedAmount||0).toLocaleString('ja-JP')}`\n};\nconst replyMessage = msgs[mt] || '✅ 記録しました';\nreturn [{ json: { replyToken: data.replyToken, replyMessage } }];"
+      },
+      "name": "成功メッセージ生成",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 200],
+      "id": "bm-success-msg-001"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/reply",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "replyToken",
+              "value": "={{ $json.replyToken }}"
+            },
+            {
+              "name": "messages",
+              "value": "=[{\"type\":\"text\",\"text\":\"{{ $json.replyMessage }}\"}]"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "LINE返信（成功）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2220, 200],
+      "id": "bm-reply-success-001"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/reply",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "replyToken",
+              "value": "={{ $json.replyToken }}"
+            },
+            {
+              "name": "messages",
+              "value": "=[{\"type\":\"text\",\"text\":\"{{ $json.replyMessage }}\"}]"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "LINE返信（照会）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2220, 440],
+      "id": "bm-reply-query-001"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/reply",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "replyToken",
+              "value": "={{ $json.replyToken }}"
+            },
+            {
+              "name": "messages",
+              "value": "=[{\"type\":\"text\",\"text\":\"❌ {{ $json.errorMessage }}\"}]"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "LINE返信（エラー）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 560],
+      "id": "bm-reply-error-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// fileId をファイル情報JSONから取得して次ノードに渡す\nconst fileInfo = $input.item.json;\nconst msgData = $('LINEメッセージ解析').first().json;\nreturn [{ json: { ...msgData, fileId: fileInfo.id } }];"
+      },
+      "name": "fileId設定（書込み）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 120],
+      "id": "bm-fileid-001"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          { "node": "Webhook応答", "type": "main", "index": 0 },
+          { "node": "LINEメッセージ解析", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "LINEメッセージ解析": {
+      "main": [
+        [{ "node": "バリデーション確認", "type": "main", "index": 0 }]
+      ]
+    },
+    "バリデーション確認": {
+      "main": [
+        [{ "node": "書込み照会判定", "type": "main", "index": 0 }],
+        [{ "node": "LINE返信（エラー）", "type": "main", "index": 0 }]
+      ]
+    },
+    "書込み照会判定": {
+      "main": [
+        [{ "node": "月次ファイル情報取得（照会）", "type": "main", "index": 0 }],
+        [{ "node": "月次ファイル情報取得", "type": "main", "index": 0 }]
+      ]
+    },
+    "月次ファイル情報取得": {
+      "main": [
+        [
+          { "node": "fileId設定（書込み）", "type": "main", "index": 0 },
+          { "node": "ファイル取得（書込み）", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "ファイル取得（書込み）": {
+      "main": [
+        [{ "node": "Excel書き込み", "type": "main", "index": 0 }]
+      ]
+    },
+    "Excel書き込み": {
+      "main": [
+        [{ "node": "アップロード", "type": "main", "index": 0 }]
+      ]
+    },
+    "アップロード": {
+      "main": [
+        [{ "node": "成功メッセージ生成", "type": "main", "index": 0 }]
+      ]
+    },
+    "成功メッセージ生成": {
+      "main": [
+        [{ "node": "LINE返信（成功）", "type": "main", "index": 0 }]
+      ]
+    },
+    "月次ファイル情報取得（照会）": {
+      "main": [
+        [{ "node": "ファイル取得（照会）", "type": "main", "index": 0 }]
+      ]
+    },
+    "ファイル取得（照会）": {
+      "main": [
+        [{ "node": "照会処理", "type": "main", "index": 0 }]
+      ]
+    },
+    "照会処理": {
+      "main": [
+        [{ "node": "LINE返信（照会）", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
