@@ -56,6 +56,23 @@ PAYMENT_METHODS = ["現金", "アメックス", "イオンカード"]
 MONTHS = ["1月", "2月", "3月", "4月", "5月", "6月",
           "7月", "8月", "9月", "10月", "11月", "12月"]
 
+# 燃料費単価（円/km）
+FUEL_RATES = {
+    "野添優":                   20,
+    "丸田翔吾":                 20,
+    "服部秀一":                 10,
+    "井本貴史":                 10,
+    "梶原通信":                 20,
+    "LLS電気":                  20,
+    "株式会社トラストテクノス":  20,
+    "株式会社RISE":             20,
+}
+
+# 複数人対応（人員列を追加）
+MULTI_PERSON_NAMES = {"梶原通信"}
+
+SHIFT_TYPES = ["昼勤", "夜勤", "半日（午前）", "半日（午後）"]
+
 # ============================================================
 # スタイル定義
 # ============================================================
@@ -493,6 +510,140 @@ def create_master_sheet(wb):
 
 
 # ============================================================
+# 個人別稼働確認テンプレート作成
+# ============================================================
+
+def create_kado_template(name, fuel_rate, multi_person=False):
+    """個人別稼働確認シート（複数現場・複数人対応）"""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "稼働確認"
+
+    # 列定義（multi_personの場合は人員列を追加）
+    if multi_person:
+        headers = [
+            ("No",        4),  ("日付",     12), ("区分",     10),
+            ("会社名",   22),  ("物件名",   20), ("人員",     18),
+            ("開始",      8),  ("終了",      8), ("休憩(分)",  8),
+            ("実働時間", 10),  ("作業内容", 26),
+            ("高速料金", 12),  ("移動距離", 10), ("燃料費",   10),
+            ("駐車場",   10),  ("資材費",   10), ("経費合計", 12),
+        ]
+        C_CLIENT = 4; C_START = 7; C_END = 8; C_BREAK = 9
+        C_HOURS  = 10; C_HW = 12; C_DIST = 13
+        C_FUEL   = 14; C_PARK = 15; C_MAT = 16; C_TOTAL = 17
+    else:
+        headers = [
+            ("No",        4),  ("日付",     12), ("区分",     10),
+            ("会社名",   22),  ("物件名",   20),
+            ("開始",      8),  ("終了",      8), ("休憩(分)",  8),
+            ("実働時間", 10),  ("作業内容", 26),
+            ("高速料金", 12),  ("移動距離", 10), ("燃料費",   10),
+            ("駐車場",   10),  ("資材費",   10), ("経費合計", 12),
+        ]
+        C_CLIENT = 4; C_START = 6; C_END = 7; C_BREAK = 8
+        C_HOURS  = 9; C_HW = 11; C_DIST = 12
+        C_FUEL   = 13; C_PARK = 14; C_MAT = 15; C_TOTAL = 16
+
+    n_cols = len(headers)
+    sl = get_column_letter
+
+    # タイトル行
+    ws.merge_cells(f"A1:{sl(n_cols)}1")
+    t = ws.cell(1, 1, f"稼働確認シート　{name}　（燃料費：{fuel_rate}円/km）")
+    t.font      = Font(bold=True, size=12, color="FFFFFF")
+    t.fill      = PatternFill("solid", fgColor="1F4E79")
+    t.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 28
+
+    # ヘッダー行（row=2）
+    apply_headers(ws, headers, row=2, color="2E75B6")
+
+    # データ行（100行）
+    DATA_ROWS = 100
+    for i in range(DATA_ROWS):
+        r   = i + 3
+        alt = (i % 2 == 1)
+        data_row_style(ws, r, n_cols, alt)
+
+        cl = sl(C_CLIENT)
+
+        # No（会社名があれば連番）
+        ws.cell(r, 1).value     = f'=IF({cl}{r}<>"",ROW()-2,"")'
+        ws.cell(r, 1).alignment = Alignment(horizontal="center", vertical="center")
+
+        # 日付フォーマット
+        ws.cell(r, 2).number_format = "MM/DD"
+
+        # 開始・終了（時間フォーマット）
+        ws.cell(r, C_START).number_format = "HH:MM"
+        ws.cell(r, C_END).number_format   = "HH:MM"
+
+        # 実働時間 = (終了-開始)*24 - 休憩分/60
+        s_l = sl(C_START); e_l = sl(C_END); b_l = sl(C_BREAK)
+        ws.cell(r, C_HOURS).value = (
+            f'=IF({s_l}{r}="","",MAX(0,({e_l}{r}-{s_l}{r})*24-{b_l}{r}/60))'
+        )
+        ws.cell(r, C_HOURS).number_format = "0.0"
+        ws.cell(r, C_HOURS).alignment     = Alignment(horizontal="center", vertical="center")
+
+        # 燃料費 = 移動距離 × 単価
+        d_l = sl(C_DIST)
+        ws.cell(r, C_FUEL).value          = f'=IF({d_l}{r}="","",{d_l}{r}*{fuel_rate})'
+        ws.cell(r, C_FUEL).number_format  = "#,##0"
+
+        # 経費合計 = 高速+燃料費+駐車場+資材費
+        hw_l = sl(C_HW); f_l = sl(C_FUEL); p_l = sl(C_PARK); m_l = sl(C_MAT)
+        ws.cell(r, C_TOTAL).value         = (
+            f'=IF({cl}{r}="","",SUM({hw_l}{r},{f_l}{r},{p_l}{r},{m_l}{r}))'
+        )
+        ws.cell(r, C_TOTAL).number_format = "#,##0"
+
+        # 数値列フォーマット
+        for col in [C_HW, C_DIST, C_PARK, C_MAT]:
+            ws.cell(r, col).number_format = "#,##0"
+
+    # ドロップダウン
+    add_dropdown(ws, sl(3),       3, DATA_ROWS + 2, SHIFT_TYPES)  # 区分
+    add_dropdown(ws, sl(C_CLIENT),3, DATA_ROWS + 2, CLIENTS)      # 会社名
+
+    # 合計行
+    sum_row = DATA_ROWS + 3
+    ws.merge_cells(f"A{sum_row}:B{sum_row}")
+    sc = ws.cell(sum_row, 1, "月次合計")
+    sc.font      = Font(bold=True)
+    sc.alignment = Alignment(horizontal="center", vertical="center")
+
+    # 稼働日数
+    ws.cell(sum_row, C_HOURS).value = f'=COUNTA(B3:B{sum_row-1})'
+    ws.cell(sum_row, C_HOURS).font  = Font(bold=True)
+    ws.cell(sum_row, C_HOURS).alignment = Alignment(horizontal="center", vertical="center")
+
+    for col in [C_HW, C_FUEL, C_PARK, C_MAT, C_TOTAL]:
+        c_l = sl(col)
+        ws.cell(sum_row, col).value        = f'=SUM({c_l}3:{c_l}{sum_row-1})'
+        ws.cell(sum_row, col).number_format = "#,##0"
+        ws.cell(sum_row, col).font          = Font(bold=True)
+
+    sum_fill = PatternFill("solid", fgColor="D9E8F5")
+    b = border_thin()
+    ws.row_dimensions[sum_row].height = 24
+    for col in range(1, n_cols + 1):
+        ws.cell(sum_row, col).fill   = sum_fill
+        ws.cell(sum_row, col).border = b
+
+    # フリーズ（タイトル+ヘッダー固定、No列固定）
+    ws.freeze_panes = "B3"
+    ws.auto_filter.ref = f"A2:{sl(n_cols)}{sum_row - 1}"
+
+    safe = name.replace("株式会社", "").replace("　", "").strip()
+    path = os.path.join(OUTPUT_DIR, f"稼働確認_{safe}_テンプレート.xlsx")
+    wb.save(path)
+    print(f"  ✓ {path}")
+    return path
+
+
+# ============================================================
 # 月次テンプレート作成
 # ============================================================
 def create_monthly_template():
@@ -623,4 +774,10 @@ def create_annual_template():
 if __name__ == "__main__":
     create_monthly_template()
     create_annual_template()
+
+    print("\n個人別稼働確認テンプレート作成中...")
+    for person_name, rate in FUEL_RATES.items():
+        multi = person_name in MULTI_PERSON_NAMES
+        create_kado_template(person_name, rate, multi_person=multi)
+
     print("\n完了しました。")
