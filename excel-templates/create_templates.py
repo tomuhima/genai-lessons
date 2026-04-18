@@ -29,18 +29,20 @@ VENDORS = [
     ("株式会社RISE",           "法人", "あり"),
 ]
 
-CLIENTS = [
-    "港振興業株式会社",
-    "株式会社トラストテクノス",
-    "有限会社平成システム",
-    "FGE合同会社",
-    "mtr株式会社",
-    "株式会社オークコミュニケーション",
-    "株式会社ライズ",
-    "千里スカイハイツ管理組合",
-    "菊次",
-    "ページ",
+# (名前, 締日, 入金サイト)
+CLIENTS_MASTER = [
+    ("港振興業株式会社",              "月末",   "翌月末"),
+    ("株式会社トラストテクノス",       "月末",   "翌月末"),
+    ("有限会社平成システム",           "20日",   "翌月末"),
+    ("FGE合同会社",                   "月末",   "翌月末"),
+    ("mtr株式会社",                   "月末",   "翌月末"),
+    ("株式会社オークコミュニケーション", "月末",  "翌々月10日"),
+    ("株式会社ライズ",                "確認中",  "確認中"),
+    ("千里スカイハイツ管理組合",       "月末",   "翌々月末"),
+    ("菊次",                          "月末",   "翌月末"),
+    ("ページ",                        "都度",   "都度"),
 ]
+CLIENTS = [c[0] for c in CLIENTS_MASTER]
 
 # 人件費シート対象（代表者・外注は除く）
 EMPLOYEES = ["丸田翔吾", "源地健史"]
@@ -498,15 +500,19 @@ def create_master_sheet(wb):
         ws.cell(i, 2, vendor_type)
         ws.cell(i, 3, invoice)
 
-    # 得意先マスター（E列）
+    # 得意先マスター（E:G列）
     ws.cell(1, 5, "得意先名").font = Font(bold=True)
-    for i, name in enumerate(CLIENTS, 2):
+    ws.cell(1, 6, "締日").font = Font(bold=True)
+    ws.cell(1, 7, "入金サイト").font = Font(bold=True)
+    for i, (name, closing, payment) in enumerate(CLIENTS_MASTER, 2):
         ws.cell(i, 5, name)
+        ws.cell(i, 6, closing)
+        ws.cell(i, 7, payment)
 
-    # 経費種類マスター（G列）
-    ws.cell(1, 7, "経費種類").font = Font(bold=True)
+    # 経費種類マスター（I列）
+    ws.cell(1, 9, "経費種類").font = Font(bold=True)
     for i, cat in enumerate(EXPENSE_CATEGORIES, 2):
-        ws.cell(i, 7, cat)
+        ws.cell(i, 9, cat)
 
     ws.sheet_state = "hidden"
 
