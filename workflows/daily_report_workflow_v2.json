@@ -198,7 +198,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data  = $('Claude解析結果処理').first().json;\nconst sites = data.sites || [];\n\nlet msg = `✅ 日報を記録しました\\n\\n日付：${data.parsedDate}\\n担当：${data.employeeName}`;\n\nif (sites.length === 1) {\n  const s = sites[0];\n  msg += `\\n\\n会社名：${s.companyName}\\n物件名：${s.propertyName}\\n区分：${s.kubun}\\n${s.startTime}〜${s.endTime}`;\n  if (s.workingTime) msg += `（稼働 ${s.workingTime}）`;\n  if (s.personnelNames) msg += `\\n人員：${s.personnelNames}（${s.personnelCount}名）`;\n  if (s.highwayFee)  msg += `\\n高速：¥${s.highwayFee.toLocaleString('ja-JP')}`;\n  if (s.distance)    msg += `\\n距離：${s.distance}km`;\n  if (s.parkingFee)  msg += `\\n駐車場：¥${s.parkingFee.toLocaleString('ja-JP')}`;\n  if (s.materialFee) msg += `\\n資材費：¥${s.materialFee.toLocaleString('ja-JP')}`;\n} else {\n  sites.forEach((s, i) => {\n    msg += `\\n\\n【現場${i+1}】\\n${s.companyName}　${s.propertyName}\\n${s.kubun}　${s.startTime}〜${s.endTime}`;\n    if (s.personnelNames) msg += `\\n人員：${s.personnelNames}（${s.personnelCount}名）`;\n  });\n}\n\nreturn [{ json: { replyToken: data.replyToken, replyMessage: msg } }];"
+        "jsCode": "const data = $('Claude解析結果処理').first().json;\nconst msg = 'お疲れ様です　日報を確認しました　ありがとうございます。';\nreturn [{ json: { replyToken: data.replyToken, replyMessage: msg } }];"
       },
       "name": "成功返信生成",
       "type": "n8n-nodes-base.code",
@@ -237,7 +237,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { \"replyToken\": $json.replyToken, \"messages\": [{ \"type\": \"text\", \"text\": \"❌ \" + $json.errorMessage }] } }}",
+        "jsonBody": "={{ { \"replyToken\": $json.replyToken, \"messages\": [{ \"type\": \"text\", \"text\": \"❌ 日報の受付に失敗しました\\nもう一度送信してください\" }] } }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
