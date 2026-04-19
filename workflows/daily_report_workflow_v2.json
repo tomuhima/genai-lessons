@@ -1,0 +1,327 @@
+{
+  "name": "日報システム v2（Claude API版）",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "daily-report",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [220, 400],
+      "id": "dr-webhook-001",
+      "webhookId": "daily-report"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "options": {}
+      },
+      "name": "Webhook応答",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [440, 200],
+      "id": "dr-respond-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\nif (!body.events || body.events.length === 0) return [];\n\n// ===== LINE userId → 名前 の対応表 =====\n// 各自のLINE UserIDに差し替えてください\nconst EMPLOYEE_MAP = {\n  \"REPLACE_NOZOE_USERID\":    \"野添優\",\n  \"REPLACE_MARUTA_USERID\":   \"丸田翔吾\",\n  \"REPLACE_GENJI_USERID\":    \"源地健史\",\n  \"REPLACE_HATTORI_USERID\":  \"服部秀一\",\n  \"REPLACE_IMOTO_USERID\":    \"井本貴史\",\n  \"REPLACE_KAJIWARA_USERID\": \"梶原通信\",\n  \"REPLACE_LLS_USERID\":      \"LLS電気\",\n  \"REPLACE_TRUST_USERID\":    \"株式会社トラストテクノス\",\n  \"REPLACE_RISE_USERID\":     \"株式会社RISE\"\n};\n\nconst results = [];\nfor (const event of body.events) {\n  if (event.type !== 'message' || event.message.type !== 'text') continue;\n\n  const userId    = event.source.userId;\n  const replyToken = event.replyToken;\n  const text      = event.message.text.trim();\n\n  if (!text.startsWith('日報')) {\n    results.push({ json: { valid: false, replyToken, errorMessage: '「日報」から始めてください' } });\n    continue;\n  }\n\n  const employeeName = EMPLOYEE_MAP[userId];\n  if (!employeeName) {\n    results.push({ json: { valid: false, replyToken, errorMessage: 'このアカウントは登録されていません。管理者にお問い合わせください。' } });\n    continue;\n  }\n\n  const now   = new Date();\n  const year  = now.getFullYear();\n  const month = now.getMonth() + 1;\n  const fileName = `稼働表_${year}年${month}月.xlsx`;\n\n  results.push({ json: {\n    valid: true,\n    replyToken,\n    userId,\n    employeeName,\n    fileName,\n    year,\n    month,\n    messageText: text\n  }});\n}\nreturn results;"
+      },
+      "name": "LINEメッセージ解析",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 400],
+      "id": "dr-parse-001"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.valid }}",
+              "value2": true
+            }
+          ]
+        },
+        "options": { "typeValidation": "loose" }
+      },
+      "name": "バリデーション確認",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [660, 400],
+      "id": "dr-valid-001"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key",          "value": "YOUR_ANTHROPIC_API_KEY" },
+            { "name": "anthropic-version",   "value": "2023-06-01" },
+            { "name": "content-type",        "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"model\": \"claude-haiku-4-5-20251001\",\n  \"max_tokens\": 1024,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"以下のLINEメッセージは電気工事会社の日報です。全ての現場の情報を抽出してJSON形式で返してください。\\n\\nメッセージ：\\n\" + $json.messageText + \"\\n\\n以下のJSON形式で返してください。現場が複数ある場合はsitesに複数のオブジェクトを入れてください：\\n{\\\"date\\\":\\\"YYYY/MM/DD\\\",\\\"sites\\\":[{\\\"kubun\\\":\\\"昼勤\\\",\\\"companyName\\\":\\\"会社名\\\",\\\"propertyName\\\":\\\"物件名\\\",\\\"startTime\\\":\\\"HH:MM\\\",\\\"endTime\\\":\\\"HH:MM\\\",\\\"breakMin\\\":0,\\\"workContent\\\":\\\"作業内容\\\",\\\"highwayFee\\\":0,\\\"distance\\\":0,\\\"parkingFee\\\":0,\\\"materialFee\\\":0,\\\"personnelNames\\\":null,\\\"personnelCount\\\":null}]}\\n\\nkubunは 昼勤/夜勤/半日（午前）/半日（午後） のいずれか。personnelNames・personnelCountは人員がいなければnull。JSONのみを返してください。\"\n  }]\n} }}",
+        "options": {}
+      },
+      "name": "Claude API呼び出し",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [880, 320],
+      "id": "dr-claude-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('LINEメッセージ解析').first().json;\nconst claudeResponse = $input.first().json;\n\ntry {\n  const textContent = claudeResponse.content[0].text;\n  const jsonMatch = textContent.match(/\\{[\\s\\S]*\\}/);\n  if (!jsonMatch) throw new Error('Claude応答のJSON抽出失敗');\n\n  const parsed = JSON.parse(jsonMatch[0]);\n  if (!parsed.date || !parsed.sites || parsed.sites.length === 0) {\n    throw new Error('日付または現場情報が取得できませんでした');\n  }\n\n  // 稼働時間を計算\n  for (const site of parsed.sites) {\n    if (site.startTime && site.endTime) {\n      const [sh, sm] = site.startTime.split(':').map(Number);\n      const [eh, em] = site.endTime.split(':').map(Number);\n      let totalMin = (eh * 60 + em) - (sh * 60 + sm);\n      if (totalMin < 0) totalMin += 24 * 60;\n      totalMin -= (site.breakMin || 0);\n      const h = Math.floor(totalMin / 60);\n      const m = totalMin % 60;\n      site.workingTime = `${h}:${String(m).padStart(2, '0')}`;\n    }\n    site.highwayFee   = parseInt(site.highwayFee)  || 0;\n    site.distance     = parseInt(site.distance)     || 0;\n    site.parkingFee   = parseInt(site.parkingFee)   || 0;\n    site.materialFee  = parseInt(site.materialFee)  || 0;\n    site.breakMin     = parseInt(site.breakMin)     || 0;\n  }\n\n  return [{ json: { ...data, parsedDate: parsed.date, sites: parsed.sites, valid: true } }];\n\n} catch (e) {\n  return [{ json: {\n    valid: false,\n    replyToken: data.replyToken,\n    errorMessage: `日報の解析に失敗しました。\\n以下を確認してください：\\n・日付が正しいか（例：2026/04/18）\\n・区分が正しいか（昼勤 / 夜勤）\\n・すでに送信済みでないか`\n  }}];\n}"
+      },
+      "name": "Claude解析結果処理",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 320],
+      "id": "dr-claude-proc-001"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.valid }}",
+              "value2": true
+            }
+          ]
+        },
+        "options": { "typeValidation": "loose" }
+      },
+      "name": "解析バリデーション",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1320, 320],
+      "id": "dr-valid-002"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/items/ONEDRIVE_FOLDER_ID:/{{ $json.fileName }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "options": {}
+      },
+      "name": "ファイル情報取得",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1540, 240],
+      "id": "dr-fileinfo-001"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/items/{{ $('ファイル情報取得').first().json.id }}/content",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "name": "ファイルダウンロード",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1760, 240],
+      "id": "dr-download-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ExcelJS = require('exceljs');\n\nreturn await (async () => {\n  const data     = $('Claude解析結果処理').first().json;\n  const fileInfo = $('ファイル情報取得').first().json;\n\n  try {\n    const workbook = new ExcelJS.Workbook();\n    const buffer   = await this.helpers.getBinaryDataBuffer(0, 'data');\n\n    if (!buffer || buffer.length === 0) {\n      throw new Error('Excelファイルのダウンロードに失敗しました');\n    }\n\n    await workbook.xlsx.load(buffer, { useSharedStrings: false });\n\n    const MULTI_PERSON = ['梶原通信', 'LLS電気', '株式会社トラストテクノス', '株式会社RISE'];\n    const isMulti = MULTI_PERSON.includes(data.employeeName);\n\n    const sheet = workbook.getWorksheet(data.employeeName);\n    if (!sheet) throw new Error(`シート「${data.employeeName}」が見つかりません`);\n\n    const toDate = (str) => {\n      if (!str) return null;\n      const p = str.split('/');\n      return new Date(Date.UTC(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2])));\n    };\n\n    const findOrCreateRow = () => {\n      let target = null;\n      sheet.eachRow((row, num) => {\n        if (num < 2 || target) return;\n        const cell = row.getCell(1).value;\n        if (!cell) return;\n        let rowDate = '';\n        if (cell instanceof Date) {\n          rowDate = `${cell.getUTCFullYear()}/${String(cell.getUTCMonth()+1).padStart(2,'0')}/${String(cell.getUTCDate()).padStart(2,'0')}`;\n        } else {\n          rowDate = String(cell).trim();\n        }\n        if (rowDate === data.parsedDate && !row.getCell(3).value) target = row;\n      });\n      if (!target) {\n        const n = sheet.lastRow ? sheet.lastRow.number + 1 : 2;\n        target = sheet.getRow(n);\n        target.getCell(1).value  = toDate(data.parsedDate);\n        target.getCell(1).numFmt = 'YYYY/MM/DD';\n      }\n      return target;\n    };\n\n    for (const site of data.sites) {\n      const row = findOrCreateRow();\n      row.getCell(2).value = site.companyName  || '';\n      row.getCell(3).value = site.kubun        || '';\n      row.getCell(4).value = site.propertyName || '';\n      row.getCell(5).value = site.startTime    || '';\n      row.getCell(6).value = site.endTime      || '';\n      row.getCell(7).value = site.breakMin     || 0;\n      row.getCell(8).value = site.workingTime  || '';\n      row.getCell(9).value = site.workContent  || '';\n\n      if (isMulti) {\n        row.getCell(10).value = site.personnelCount || '';\n        row.getCell(11).value = site.personnelNames || '';\n        row.getCell(12).value = site.highwayFee;\n        row.getCell(13).value = site.distance;\n        row.getCell(14).value = site.parkingFee;\n        row.getCell(15).value = site.materialFee;\n      } else {\n        row.getCell(10).value = site.highwayFee;\n        row.getCell(11).value = site.distance;\n        row.getCell(12).value = site.parkingFee;\n        row.getCell(13).value = site.materialFee;\n      }\n    }\n\n    const out = await workbook.xlsx.writeBuffer({ useSharedStrings: false });\n    const bin = await this.helpers.prepareBinaryData(\n      Buffer.from(out),\n      data.fileName,\n      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'\n    );\n\n    return [{ json: { ...data, fileId: fileInfo.id, valid: true }, binary: { data: bin } }];\n\n  } catch (err) {\n    return [{ json: { valid: false, replyToken: data.replyToken, errorMessage: err.message } }];\n  }\n})();"
+      },
+      "name": "Excel書き込み",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1980, 240],
+      "id": "dr-excel-001"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.valid }}",
+              "value2": true
+            }
+          ]
+        },
+        "options": { "typeValidation": "loose" }
+      },
+      "name": "書き込みバリデーション",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2200, 240],
+      "id": "dr-valid-003"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/items/{{ $('ファイル情報取得').first().json.id }}/content",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "アップロード",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2420, 160],
+      "id": "dr-upload-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data  = $('Claude解析結果処理').first().json;\nconst sites = data.sites || [];\n\nlet msg = `✅ 日報を記録しました\\n\\n日付：${data.parsedDate}\\n担当：${data.employeeName}`;\n\nif (sites.length === 1) {\n  const s = sites[0];\n  msg += `\\n\\n会社名：${s.companyName}\\n物件名：${s.propertyName}\\n区分：${s.kubun}\\n${s.startTime}〜${s.endTime}`;\n  if (s.workingTime) msg += `（稼働 ${s.workingTime}）`;\n  if (s.personnelNames) msg += `\\n人員：${s.personnelNames}（${s.personnelCount}名）`;\n  if (s.highwayFee)  msg += `\\n高速：¥${s.highwayFee.toLocaleString('ja-JP')}`;\n  if (s.distance)    msg += `\\n距離：${s.distance}km`;\n  if (s.parkingFee)  msg += `\\n駐車場：¥${s.parkingFee.toLocaleString('ja-JP')}`;\n  if (s.materialFee) msg += `\\n資材費：¥${s.materialFee.toLocaleString('ja-JP')}`;\n} else {\n  sites.forEach((s, i) => {\n    msg += `\\n\\n【現場${i+1}】\\n${s.companyName}　${s.propertyName}\\n${s.kubun}　${s.startTime}〜${s.endTime}`;\n    if (s.personnelNames) msg += `\\n人員：${s.personnelNames}（${s.personnelCount}名）`;\n  });\n}\n\nreturn [{ json: { replyToken: data.replyToken, replyMessage: msg } }];"
+      },
+      "name": "成功返信生成",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2640, 160],
+      "id": "dr-success-msg-001"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/reply",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"replyToken\": $json.replyToken, \"messages\": [{ \"type\": \"text\", \"text\": $json.replyMessage }] } }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer YOUR_LINE_CHANNEL_ACCESS_TOKEN" }
+          ]
+        },
+        "options": {}
+      },
+      "name": "LINE返信（成功）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2860, 160],
+      "id": "dr-reply-success-001"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/reply",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"replyToken\": $json.replyToken, \"messages\": [{ \"type\": \"text\", \"text\": \"❌ \" + $json.errorMessage }] } }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer YOUR_LINE_CHANNEL_ACCESS_TOKEN" }
+          ]
+        },
+        "options": {}
+      },
+      "name": "LINE返信（エラー）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [880, 560],
+      "id": "dr-reply-error-001"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          { "node": "Webhook応答",       "type": "main", "index": 0 },
+          { "node": "LINEメッセージ解析", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "LINEメッセージ解析": {
+      "main": [
+        [{ "node": "バリデーション確認", "type": "main", "index": 0 }]
+      ]
+    },
+    "バリデーション確認": {
+      "main": [
+        [{ "node": "Claude API呼び出し", "type": "main", "index": 0 }],
+        [{ "node": "LINE返信（エラー）",  "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude API呼び出し": {
+      "main": [
+        [{ "node": "Claude解析結果処理", "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude解析結果処理": {
+      "main": [
+        [{ "node": "解析バリデーション", "type": "main", "index": 0 }]
+      ]
+    },
+    "解析バリデーション": {
+      "main": [
+        [{ "node": "ファイル情報取得",  "type": "main", "index": 0 }],
+        [{ "node": "LINE返信（エラー）", "type": "main", "index": 0 }]
+      ]
+    },
+    "ファイル情報取得": {
+      "main": [
+        [{ "node": "ファイルダウンロード", "type": "main", "index": 0 }]
+      ]
+    },
+    "ファイルダウンロード": {
+      "main": [
+        [{ "node": "Excel書き込み", "type": "main", "index": 0 }]
+      ]
+    },
+    "Excel書き込み": {
+      "main": [
+        [{ "node": "書き込みバリデーション", "type": "main", "index": 0 }]
+      ]
+    },
+    "書き込みバリデーション": {
+      "main": [
+        [{ "node": "アップロード",        "type": "main", "index": 0 }],
+        [{ "node": "LINE返信（エラー）",  "type": "main", "index": 0 }]
+      ]
+    },
+    "アップロード": {
+      "main": [
+        [{ "node": "成功返信生成", "type": "main", "index": 0 }]
+      ]
+    },
+    "成功返信生成": {
+      "main": [
+        [{ "node": "LINE返信（成功）", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
