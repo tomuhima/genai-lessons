@@ -1,0 +1,777 @@
+{
+  "name": "経営管理システム",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "business-management",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        400
+      ],
+      "id": "bm-webhook-001",
+      "webhookId": "business-management"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "options": {}
+      },
+      "name": "Webhook応答",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        460,
+        240
+      ],
+      "id": "bm-respond-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\nif (!body.events || body.events.length === 0) return [];\nconst results = [];\nfor (const event of body.events) {\n  if (event.type !== 'message') continue;\n  const replyToken = event.replyToken;\n  const userId = event.source.userId;\n  const msgType = event.message.type;\n  const now = new Date();\n  const year = now.getFullYear();\n  const month = now.getMonth() + 1;\n  const today = `${year}/${String(month).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;\n  const fileName = `経費管理_${year}年${String(month).padStart(2,'0')}月.xlsx`;\n  if (msgType === 'image') { results.push({ json: { valid: true, messageType: 'image', messageId: event.message.id, replyToken, userId, fileName, year, month } }); continue; }\n  if (msgType !== 'text') continue;\n  const text = event.message.text.trim();\n  const extract = (label, str) => { const m = str.match(new RegExp(label + '[\\uff1a:]\\\\s*(.+)')); return m ? m[1].trim() : null; };\n  const toNum = (s) => s ? parseInt(s.replace(/[,，￥¥\\s]/g, '')) || 0 : 0;\n  const replyError = (msg) => results.push({ json: { valid: false, replyToken, userId, errorMessage: msg } });\n  if (text === 'ヘルプ' || text === 'help') { results.push({ json: { valid: true, messageType: 'query_help', replyToken, userId, fileName, year, month } }); continue; }\n  if (text === '未払い確認') { results.push({ json: { valid: true, messageType: 'query_unpaid', replyToken, userId, fileName, year, month } }); continue; }\n  if (text === '未入金確認') { results.push({ json: { valid: true, messageType: 'query_unreceived', replyToken, userId, fileName, year, month } }); continue; }\n  if (text === '今月サマリー') { results.push({ json: { valid: true, messageType: 'query_summary', replyToken, userId, fileName, year, month } }); continue; }\n  if (text === '今月の粗利は？' || text === '粗利確認') { results.push({ json: { valid: true, messageType: 'query_gross', replyToken, userId, fileName, year, month } }); continue; }\n  if (text === '今月の経費合計は？' || text === '経費合計') { results.push({ json: { valid: true, messageType: 'query_expense_total', replyToken, userId, fileName, year, month } }); continue; }\n  if (text === '支払期限確認') { results.push({ json: { valid: true, messageType: 'query_due', replyToken, userId, fileName, year, month } }); continue; }\n  const vendorMatch = text.match(/^(.+)の未払い$/);\n  if (vendorMatch) { results.push({ json: { valid: true, messageType: 'query_unpaid', vendorSearch: vendorMatch[1], replyToken, userId, fileName, year, month } }); continue; }\n  if (text.startsWith('経費')) {\n    const category = extract('種類', text); const amount = extract('金額', text); const store = extract('店名', text);\n    const missing = []; if (!category) missing.push('種類'); if (!amount) missing.push('金額'); if (!store) missing.push('店名');\n    if (missing.length > 0) { replyError(`以下の項目が不足しています：\\n${missing.join('、')}\\n\\n例：\\n経費\\n種類：交通費\\n店名：コンビニ\\n金額：500\\n支払方法：現金`); continue; }\n    results.push({ json: { valid: true, messageType: 'expense', replyToken, userId, fileName, year, month, date: extract('日付', text) || today, category, paymentMethod: extract('支払方法', text) || '現金', store, project: extract('案件', text) || '', amount: toNum(amount), note: extract('備考', text) || '' } }); continue;\n  }\n  if (text.startsWith('外注請求')) {\n    const vendor = extract('業者', text); const project = extract('案件', text); const amount = extract('金額', text);\n    const missing = []; if (!vendor) missing.push('業者'); if (!project) missing.push('案件'); if (!amount) missing.push('金額');\n    if (missing.length > 0) { replyError(`以下の項目が不足しています：\\n${missing.join('、')}`); continue; }\n    const amtNum = toNum(amount); const taxRaw = extract('消費税', text); const taxNum = taxRaw ? toNum(taxRaw) : Math.round(amtNum * 0.1);\n    const invDate = extract('請求日', text) || today;\n    results.push({ json: { valid: true, messageType: 'subcontractor_invoice', replyToken, userId, fileName, year, month, registrationDate: invDate, vendor, project, amountExTax: amtNum, tax: taxNum, total: amtNum + taxNum, invoiceDate: invDate, paymentDueDate: extract('支払期限', text) || '' } }); continue;\n  }\n  if (text.startsWith('外注支払')) {\n    const vendor = extract('業者', text); const amount = extract('金額', text); const paymentDate = extract('支払日', text);\n    const missing = []; if (!vendor) missing.push('業者'); if (!amount) missing.push('金額'); if (!paymentDate) missing.push('支払日');\n    if (missing.length > 0) { replyError(`以下の項目が不足しています：\\n${missing.join('、')}`); continue; }\n    results.push({ json: { valid: true, messageType: 'subcontractor_payment', replyToken, userId, fileName, year, month, vendor, paymentDate, paymentAmount: toNum(amount) } }); continue;\n  }\n  if (text.startsWith('売上')) {\n    const client = extract('得意先', text); const project = extract('案件', text); const amount = extract('金額', text);\n    const missing = []; if (!client) missing.push('得意先'); if (!project) missing.push('案件'); if (!amount) missing.push('金額');\n    if (missing.length > 0) { replyError(`以下の項目が不足しています：\\n${missing.join('、')}`); continue; }\n    const amtNum = toNum(amount); const taxRaw = extract('消費税', text); const taxNum = taxRaw ? toNum(taxRaw) : Math.round(amtNum * 0.1);\n    const invDate = extract('請求日', text) || today;\n    results.push({ json: { valid: true, messageType: 'sales', replyToken, userId, fileName, year, month, registrationDate: invDate, client, project, amountExTax: amtNum, tax: taxNum, total: amtNum + taxNum, invoiceDate: invDate, dueDate: extract('支払期限', text) || '' } }); continue;\n  }\n  if (text.startsWith('入金')) {\n    const client = extract('得意先', text); const amount = extract('金額', text); const receivedDate = extract('入金日', text);\n    const missing = []; if (!client) missing.push('得意先'); if (!amount) missing.push('金額'); if (!receivedDate) missing.push('入金日');\n    if (missing.length > 0) { replyError(`以下の項目が不足しています：\\n${missing.join('、')}`); continue; }\n    results.push({ json: { valid: true, messageType: 'payment_received', replyToken, userId, fileName, year, month, client, receivedDate, receivedAmount: toNum(amount), project: extract('案件', text) || '' } }); continue;\n  }\n  replyError(`コマンドを認識できません。\\n「ヘルプ」と送信してください。`);\n}\nreturn results;"
+      },
+      "name": "LINEメッセージ解析",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        400
+      ],
+      "id": "bm-parse-001"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.valid }}",
+              "value2": true
+            }
+          ]
+        },
+        "options": {
+          "typeValidation": "loose"
+        }
+      },
+      "name": "バリデーション確認",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        680,
+        400
+      ],
+      "id": "bm-valid-001"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{ $json.messageType }}",
+                    "operation": "contains",
+                    "value2": "query"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "fallbackOutput": "extra"
+      },
+      "name": "書込み照会判定",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        900,
+        320
+      ],
+      "id": "bm-switch-001"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/経営管理/月次/{{ $json.fileName }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "options": {}
+      },
+      "name": "月次ファイル情報取得",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1120,
+        200
+      ],
+      "id": "bm-fileinfo-001"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/経営管理/月次/{{ $('LINEメッセージ解析').first().json.fileName }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "options": {}
+      },
+      "name": "月次ファイル情報取得（照会）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1120,
+        440
+      ],
+      "id": "bm-fileinfo-002"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const data = $('LINEメッセージ解析').first().json;\n  const fileInfo = $('月次ファイル情報取得').first().json;\n  try {\n    const downloadUrl = fileInfo['@microsoft.graph.downloadUrl'];\n    if (!downloadUrl) throw new Error('ダウンロードURLが取得できませんでした');\n    const response = await this.helpers.httpRequest({ method: 'GET', url: downloadUrl, encoding: 'arraybuffer', returnFullResponse: false });\n    const workbook = new ExcelJS.Workbook();\n    await workbook.xlsx.load(Buffer.from(response), { useSharedStrings: false });\n    const toDate = (dateStr) => { const p = dateStr.split('/'); return new Date(Date.UTC(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2]))); };\n    const findLastRow = (sheet, keyCol) => { let last = 1; sheet.eachRow((row, num) => { if (num >= 2 && row.getCell(keyCol).value) last = num; }); return last; };\n    const getVal = (cell) => (cell && typeof cell === 'object' && 'result' in cell) ? cell.result : cell;\n    const mt = data.messageType;\n    if (mt === 'expense') {\n      const sheet = workbook.getWorksheet('経費');\n      if (!sheet) throw new Error('経費シートが見つかりません');\n      const r = findLastRow(sheet, 2) + 1;\n      const row = sheet.getRow(r);\n      row.getCell(2).value = toDate(data.date); row.getCell(2).numFmt = 'YYYY/MM/DD';\n      row.getCell(3).value = data.category; row.getCell(4).value = data.paymentMethod;\n      row.getCell(5).value = data.store; row.getCell(6).value = data.project;\n      row.getCell(7).value = data.amount; row.getCell(7).numFmt = '#,##0';\n      row.getCell(8).value = data.note;\n    } else if (mt === 'subcontractor_invoice') {\n      const sheet = workbook.getWorksheet('外注管理');\n      if (!sheet) throw new Error('外注管理シートが見つかりません');\n      const r = findLastRow(sheet, 3) + 1;\n      const row = sheet.getRow(r);\n      row.getCell(2).value = toDate(data.registrationDate); row.getCell(2).numFmt = 'YYYY/MM/DD';\n      row.getCell(3).value = data.vendor; row.getCell(6).value = data.project;\n      row.getCell(7).value = data.amountExTax; row.getCell(7).numFmt = '#,##0';\n      row.getCell(8).value = data.tax; row.getCell(8).numFmt = '#,##0';\n      row.getCell(9).value = data.total; row.getCell(9).numFmt = '#,##0';\n      row.getCell(10).value = toDate(data.invoiceDate); row.getCell(10).numFmt = 'YYYY/MM/DD';\n      if (data.paymentDueDate) { row.getCell(11).value = toDate(data.paymentDueDate); row.getCell(11).numFmt = 'YYYY/MM/DD'; }\n    } else if (mt === 'subcontractor_payment') {\n      const sheet = workbook.getWorksheet('外注管理');\n      if (!sheet) throw new Error('外注管理シートが見つかりません');\n      let targetRow = null;\n      sheet.eachRow((row, num) => { if (num < 2 || targetRow) return; if (row.getCell(3).value === data.vendor && getVal(row.getCell(14).value) === '未払') targetRow = row; });\n      if (!targetRow) return [{ json: { valid: false, replyToken: data.replyToken, errorMessage: `${data.vendor}の未払い請求が見つかりません` } }];\n      targetRow.getCell(12).value = toDate(data.paymentDate); targetRow.getCell(12).numFmt = 'YYYY/MM/DD';\n      targetRow.getCell(13).value = data.paymentAmount; targetRow.getCell(13).numFmt = '#,##0';\n    } else if (mt === 'sales') {\n      const sheet = workbook.getWorksheet('売上管理');\n      if (!sheet) throw new Error('売上管理シートが見つかりません');\n      const r = findLastRow(sheet, 3) + 1;\n      const row = sheet.getRow(r);\n      row.getCell(2).value = toDate(data.registrationDate); row.getCell(2).numFmt = 'YYYY/MM/DD';\n      row.getCell(3).value = data.client; row.getCell(4).value = data.project;\n      row.getCell(5).value = data.amountExTax; row.getCell(5).numFmt = '#,##0';\n      row.getCell(6).value = data.tax; row.getCell(6).numFmt = '#,##0';\n      row.getCell(7).value = data.total; row.getCell(7).numFmt = '#,##0';\n      row.getCell(8).value = toDate(data.invoiceDate); row.getCell(8).numFmt = 'YYYY/MM/DD';\n      if (data.dueDate) { row.getCell(9).value = toDate(data.dueDate); row.getCell(9).numFmt = 'YYYY/MM/DD'; }\n    } else if (mt === 'payment_received') {\n      const sheet = workbook.getWorksheet('売上管理');\n      if (!sheet) throw new Error('売上管理シートが見つかりません');\n      let targetRow = null;\n      sheet.eachRow((row, num) => { if (num < 2 || targetRow) return; if (row.getCell(3).value === data.client && getVal(row.getCell(12).value) === '未入金') targetRow = row; });\n      if (!targetRow) return [{ json: { valid: false, replyToken: data.replyToken, errorMessage: `${data.client}の未入金請求が見つかりません` } }];\n      targetRow.getCell(10).value = toDate(data.receivedDate); targetRow.getCell(10).numFmt = 'YYYY/MM/DD';\n      targetRow.getCell(11).value = data.receivedAmount; targetRow.getCell(11).numFmt = '#,##0';\n    }\n    const outBuffer = await workbook.xlsx.writeBuffer({ useSharedStrings: false });\n    const bin = await this.helpers.prepareBinaryData(Buffer.from(outBuffer), data.fileName, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');\n    return [{ json: { ...data, fileId: fileInfo.id, valid: true }, binary: { data: bin } }];\n  } catch (error) {\n    return [{ json: { valid: false, replyToken: data.replyToken, errorMessage: error.message } }];\n  }\n})();"
+      },
+      "name": "Excel書き込み",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        200
+      ],
+      "id": "bm-excel-write-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const data = $('LINEメッセージ解析').first().json;\n  const fileInfo = $('月次ファイル情報取得（照会）').first().json;\n  const fmt = (n) => (n || 0).toLocaleString('ja-JP');\n  const getVal = (cell) => (cell && typeof cell === 'object' && 'result' in cell) ? cell.result : cell;\n  const fmtDate = (cell) => { if (!cell) return '不明'; if (typeof cell.getTime === 'function') { const d = new Date(cell.getTime() + 9*3600000); return `${d.getUTCFullYear()}/${d.getUTCMonth()+1}/${d.getUTCDate()}`; } return String(cell); };\n  try {\n    if (data.messageType === 'query_help') {\n      const msg = '【経費管理 使い方】\\n\\n📝 入力コマンド\\n・経費\\n  種類：交通費\\n  店名：コンビニ\\n  金額：500\\n  支払方法：現金\\n\\n・外注請求\\n  業者：〇〇社\\n  案件：△△工事\\n  金額：50000\\n\\n・外注支払\\n  業者：〇〇社\\n  金額：55000\\n  支払日：2026/04/25\\n\\n・売上\\n  得意先：〇〇社\\n  案件：△△工事\\n  金額：100000\\n\\n・入金\\n  得意先：〇〇社\\n  金額：110000\\n  入金日：2026/04/20\\n\\n🔍 照会コマンド\\n・未払い確認\\n・〇〇社の未払い\\n・未入金確認\\n・今月サマリー\\n・今月の粗利は？\\n・今月の経費合計は？\\n・支払期限確認\\n\\n📸 レシート送信\\n写真を送ると自動読取';\n      return [{ json: { replyToken: data.replyToken, replyMessage: msg } }];\n    }\n    const downloadUrl = fileInfo['@microsoft.graph.downloadUrl'];\n    if (!downloadUrl) throw new Error('ダウンロードURLが取得できませんでした');\n    const response = await this.helpers.httpRequest({ method: 'GET', url: downloadUrl, encoding: 'arraybuffer', returnFullResponse: false });\n    const workbook = new ExcelJS.Workbook();\n    await workbook.xlsx.load(Buffer.from(response), { useSharedStrings: false });\n    if (data.messageType === 'query_unpaid' || data.vendorSearch) {\n      const sheet = workbook.getWorksheet('外注管理');\n      const unpaid = [];\n      sheet.eachRow((row, num) => {\n        if (num < 2) return;\n        const vendor = row.getCell(3).value;\n        if (!vendor) return;\n        if (data.vendorSearch && !String(vendor).includes(data.vendorSearch)) return;\n        const status = getVal(row.getCell(14).value);\n        if (status !== '未払') return;\n        const total = getVal(row.getCell(9).value);\n        const project = row.getCell(6).value || '';\n        const limit = fmtDate(getVal(row.getCell(11).value));\n        unpaid.push(`${vendor}\\n  ${project}\\n  ¥${fmt(total)}  期限:${limit}`);\n      });\n      const title = data.vendorSearch ? `【${data.vendorSearch}の未払い】` : `【未払い一覧】${data.year}年${data.month}月`;\n      const msg = unpaid.length > 0 ? `${title}\\n\\n${unpaid.join('\\n\\n')}\\n\\n計${unpaid.length}件` : `${title}\\n\\n未払いはありません`;\n      return [{ json: { replyToken: data.replyToken, replyMessage: msg } }];\n    }\n    if (data.messageType === 'query_unreceived') {\n      const sheet = workbook.getWorksheet('売上管理');\n      const list = [];\n      sheet.eachRow((row, num) => {\n        if (num < 2) return;\n        const client = row.getCell(3).value;\n        if (!client) return;\n        const status = getVal(row.getCell(12).value);\n        if (status !== '未入金') return;\n        const total = getVal(row.getCell(7).value);\n        const project = row.getCell(4).value || '';\n        const due = fmtDate(row.getCell(9).value);\n        list.push(`${client}\\n  ${project}\\n  ¥${fmt(total)}  期限:${due}`);\n      });\n      const msg = list.length > 0 ? `【未入金一覧】${data.year}年${data.month}月\\n\\n${list.join('\\n\\n')}\\n\\n計${list.length}件` : `【未入金一覧】${data.year}年${data.month}月\\n\\n未入金はありません`;\n      return [{ json: { replyToken: data.replyToken, replyMessage: msg } }];\n    }\n    if (data.messageType === 'query_summary' || data.messageType === 'query_gross' || data.messageType === 'query_expense_total') {\n      let salesTotal=0, receivedTotal=0, unreceivedTotal=0, subTotal=0, unpaidTotal=0, expTotal=0;\n      const expCats = {};\n      const salesSheet = workbook.getWorksheet('売上管理');\n      if (salesSheet) salesSheet.eachRow((row, num) => {\n        if (num < 2 || !row.getCell(3).value) return;\n        const total = getVal(row.getCell(7).value) || 0;\n        const status = getVal(row.getCell(12).value);\n        salesTotal += total;\n        if (status === '入金済') receivedTotal += (row.getCell(11).value || 0);\n        if (status === '未入金') unreceivedTotal += total;\n      });\n      const subSheet = workbook.getWorksheet('外注管理');\n      if (subSheet) subSheet.eachRow((row, num) => {\n        if (num < 2 || !row.getCell(3).value) return;\n        const total = getVal(row.getCell(9).value) || 0;\n        const status = getVal(row.getCell(14).value);\n        subTotal += total;\n        if (status === '未払') unpaidTotal += total;\n      });\n      const expSheet = workbook.getWorksheet('経費');\n      if (expSheet) expSheet.eachRow((row, num) => {\n        if (num < 2) return;\n        const amt = row.getCell(7).value || 0;\n        const cat = row.getCell(3).value || 'その他';\n        expTotal += amt;\n        expCats[cat] = (expCats[cat] || 0) + amt;\n      });\n      const gross = salesTotal - subTotal - expTotal;\n      if (data.messageType === 'query_gross') {\n        const msg = `【今月の粗利】${data.year}年${data.month}月\\n\\n売上：¥${fmt(salesTotal)}\\n外注費：¥${fmt(subTotal)}\\n経費：¥${fmt(expTotal)}\\n\\n粗利：¥${fmt(gross)}`;\n        return [{ json: { replyToken: data.replyToken, replyMessage: msg } }];\n      }\n      if (data.messageType === 'query_expense_total') {\n        const cats = Object.entries(expCats).map(([k,v]) => `  ${k}：¥${fmt(v)}`).join('\\n');\n        const msg = `【今月の経費合計】${data.year}年${data.month}月\\n\\n合計：¥${fmt(expTotal)}\\n\\n${cats}`;\n        return [{ json: { replyToken: data.replyToken, replyMessage: msg } }];\n      }\n      const msg = `【今月サマリー】${data.year}年${data.month}月\\n\\n■売上\\n  請求済：¥${fmt(salesTotal)}\\n  入金済：¥${fmt(receivedTotal)}\\n  未入金：¥${fmt(unreceivedTotal)}\\n\\n■外注費\\n  合計：¥${fmt(subTotal)}\\n  未払い：¥${fmt(unpaidTotal)}\\n\\n■経費\\n  合計：¥${fmt(expTotal)}\\n\\n■粗利（概算）\\n  ¥${fmt(gross)}`;\n      return [{ json: { replyToken: data.replyToken, replyMessage: msg } }];\n    }\n    if (data.messageType === 'query_due') {\n      const now = new Date();\n      const in7 = new Date(now.getTime() + 7*24*3600000);\n      const dueSoon = [];\n      const subSheet = workbook.getWorksheet('外注管理');\n      if (subSheet) subSheet.eachRow((row, num) => {\n        if (num < 2 || !row.getCell(3).value) return;\n        const status = getVal(row.getCell(14).value);\n        if (status !== '未払') return;\n        const dueCell = getVal(row.getCell(11).value);\n        if (!dueCell || typeof dueCell.getTime !== 'function') return;\n        if (dueCell <= in7) dueSoon.push(`[外注未払] ${row.getCell(3).value}：¥${fmt(getVal(row.getCell(9).value))}  期限:${fmtDate(dueCell)}`);\n      });\n      const salesSheet = workbook.getWorksheet('売上管理');\n      if (salesSheet) salesSheet.eachRow((row, num) => {\n        if (num < 2 || !row.getCell(3).value) return;\n        const status = getVal(row.getCell(12).value);\n        if (status !== '未入金') return;\n        const dueCell = row.getCell(9).value;\n        if (!dueCell || typeof dueCell.getTime !== 'function') return;\n        if (dueCell <= in7) dueSoon.push(`[売上未入金] ${row.getCell(3).value}：¥${fmt(getVal(row.getCell(7).value))}  期限:${fmtDate(dueCell)}`);\n      });\n      const msg = dueSoon.length > 0 ? `【7日以内の期限】\\n\\n${dueSoon.join('\\n')}` : '【支払期限確認】\\n\\n7日以内の期限はありません';\n      return [{ json: { replyToken: data.replyToken, replyMessage: msg } }];\n    }\n    return [{ json: { replyToken: data.replyToken, replyMessage: '不明なコマンドです' } }];\n  } catch (error) {\n    return [{ json: { replyToken: data.replyToken, replyMessage: `エラー: ${error.message}` } }];\n  }\n})();"
+      },
+      "name": "照会処理",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        440
+      ],
+      "id": "bm-query-001"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/items/{{ $json.fileId }}/content",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "アップロード",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2000,
+        160
+      ],
+      "id": "bm-upload-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('LINEメッセージ解析').first().json;\nconst mt = data.messageType;\nconst msgs = {\n  expense:                `✅ 経費を記録しました\\n\\n日付: ${data.date}\\n種類: ${data.category}\\n支払方法: ${data.paymentMethod}\\n店名: ${data.store}\\n金額: ¥${(data.amount||0).toLocaleString('ja-JP')}`,\n  subcontractor_invoice:  `✅ 外注請求を記録しました\\n\\n業者: ${data.vendor}\\n案件: ${data.project}\\n請求額: ¥${(data.amountExTax||0).toLocaleString('ja-JP')}\\n消費税: ¥${(data.tax||0).toLocaleString('ja-JP')}\\n合計: ¥${(data.total||0).toLocaleString('ja-JP')}\\n請求日: ${data.invoiceDate}`,\n  subcontractor_payment:  `✅ 外注支払を記録しました\\n\\n業者: ${data.vendor}\\n支払日: ${data.paymentDate}\\n支払額: ¥${(data.paymentAmount||0).toLocaleString('ja-JP')}`,\n  sales:                  `✅ 売上を記録しました\\n\\n得意先: ${data.client}\\n案件: ${data.project}\\n請求額: ¥${(data.amountExTax||0).toLocaleString('ja-JP')}\\n消費税: ¥${(data.tax||0).toLocaleString('ja-JP')}\\n合計: ¥${(data.total||0).toLocaleString('ja-JP')}\\n請求日: ${data.invoiceDate}`,\n  payment_received:       `✅ 入金を記録しました\\n\\n得意先: ${data.client}\\n入金日: ${data.receivedDate}\\n入金額: ¥${(data.receivedAmount||0).toLocaleString('ja-JP')}`\n};\nconst replyMessage = msgs[mt] || '✅ 記録しました';\nreturn [{ json: { replyToken: data.replyToken, replyMessage } }];"
+      },
+      "name": "成功メッセージ生成",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        160
+      ],
+      "id": "bm-success-msg-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lineToken = 'Bearer YOUR_EXPENSE_LINE_TOKEN';\nconst replyToken = $json.replyToken;\nconst text = $json.replyMessage || 'お疲れ様です';\nif (replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST', url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken },\n    body: { replyToken, messages: [{ type: 'text', text }] }, json: true\n  });\n}\nreturn [{ json: { done: true } }];"
+      },
+      "name": "LINE返信（成功）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2440,
+        160
+      ],
+      "id": "bm-reply-success-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lineToken = 'Bearer YOUR_EXPENSE_LINE_TOKEN';\nconst replyToken = $json.replyToken;\nconst text = $json.replyMessage || '照会結果';\nif (replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST', url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken },\n    body: { replyToken, messages: [{ type: 'text', text }] }, json: true\n  });\n}\nreturn [{ json: { done: true } }];"
+      },
+      "name": "LINE返信（照会）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        440
+      ],
+      "id": "bm-reply-query-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lineToken = 'Bearer YOUR_EXPENSE_LINE_TOKEN';\nconst replyToken = $json.replyToken;\nconst text = $json.errorMessage || '❌ エラーが発生しました\\nもう一度送信してください';\nif (replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST', url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken },\n    body: { replyToken, messages: [{ type: 'text', text }] }, json: true\n  });\n}\nreturn [{ json: { done: true } }];"
+      },
+      "name": "LINE返信（エラー）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        560
+      ],
+      "id": "bm-reply-error-001"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.valid }}",
+              "value2": true
+            }
+          ]
+        },
+        "options": {
+          "typeValidation": "loose"
+        }
+      },
+      "name": "書込み結果確認",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1780,
+        200
+      ],
+      "id": "bm-write-check-001"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 10 25 * *"
+            }
+          ]
+        }
+      },
+      "name": "締日リマインダートリガー",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        1000
+      ],
+      "id": "bm-sched-reminder-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date();\nconst year = now.getFullYear();\nconst month = now.getMonth() + 1;\nconst fileName = `経費管理_${year}年${String(month).padStart(2,'0')}月.xlsx`;\nreturn [{ json: { fileName, year, month } }];"
+      },
+      "name": "リマインダー準備",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        1000
+      ],
+      "id": "bm-reminder-prep-001"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.microsoft.com/v1.0/me/drive/root:/経営管理/月次/{{ $json.fileName }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "options": {}
+      },
+      "name": "リマインダーファイル情報取得",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        680,
+        1000
+      ],
+      "id": "bm-reminder-fi-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const fileInfo = $input.first().json;\n  const prep = $('リマインダー準備').first().json;\n  const fmt = (n) => (n || 0).toLocaleString('ja-JP');\n  const getVal = (cell) => (cell && typeof cell === 'object' && 'result' in cell) ? cell.result : cell;\n  try {\n    const dlUrl = fileInfo['@microsoft.graph.downloadUrl'];\n    if (!dlUrl) return [{ json: { pushMessage: '' } }];\n    const res = await this.helpers.httpRequest({ method: 'GET', url: dlUrl, encoding: 'arraybuffer', returnFullResponse: false });\n    const wb = new ExcelJS.Workbook();\n    await wb.xlsx.load(Buffer.from(res), { useSharedStrings: false });\n    const unpaid = []; const unreceived = [];\n    const sub = wb.getWorksheet('外注管理');\n    if (sub) sub.eachRow((row, num) => {\n      if (num < 2 || !row.getCell(3).value) return;\n      if (getVal(row.getCell(14).value) !== '未払') return;\n      const total = getVal(row.getCell(9).value);\n      unpaid.push(`  ${row.getCell(3).value}: ¥${fmt(total)}`);\n    });\n    const sales = wb.getWorksheet('売上管理');\n    if (sales) sales.eachRow((row, num) => {\n      if (num < 2 || !row.getCell(3).value) return;\n      if (getVal(row.getCell(12).value) !== '未入金') return;\n      const total = getVal(row.getCell(7).value);\n      unreceived.push(`  ${row.getCell(3).value}: ¥${fmt(total)}`);\n    });\n    let msg = `【月末お知らせ】${prep.year}年${prep.month}月`;\n    if (unpaid.length > 0) msg += `\\n\\n■外注未払い ${unpaid.length}件\\n` + unpaid.join('\\n');\n    if (unreceived.length > 0) msg += `\\n\\n■売上未入金 ${unreceived.length}件\\n` + unreceived.join('\\n');\n    if (unpaid.length === 0 && unreceived.length === 0) msg += '\\n\\n未払い・未入金はありません';\n    return [{ json: { pushMessage: msg } }];\n  } catch(e) { return [{ json: { pushMessage: '' } }]; }\n})();"
+      },
+      "name": "リマインダー処理",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        1000
+      ],
+      "id": "bm-reminder-proc-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lineToken = 'Bearer YOUR_EXPENSE_LINE_TOKEN';\nconst USERS = ['YOUR_USERID_NOZOE_YU', 'YOUR_USERID_NOZOE_AKIKO'];\nconst msg = $json.pushMessage;\nif (!msg || !msg.trim()) { return [{ json: { done: true, skipped: true } }]; }\nawait this.helpers.httpRequest({\n  method: 'POST', url: 'https://api.line.me/v2/bot/message/multicast',\n  headers: { 'Authorization': lineToken },\n  body: { to: USERS, messages: [{ type: 'text', text: msg }] }, json: true\n});\nreturn [{ json: { done: true } }];"
+      },
+      "name": "LINE Push（リマインダー）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        1000
+      ],
+      "id": "bm-push-reminder-001"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 1 * *"
+            }
+          ]
+        }
+      },
+      "name": "月次レポートトリガー",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        1200
+      ],
+      "id": "bm-sched-report-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date();\nconst year = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();\nconst month = now.getMonth() === 0 ? 12 : now.getMonth();\nconst fileName = `経費管理_${year}年${String(month).padStart(2,'0')}月.xlsx`;\nreturn [{ json: { fileName, year, month } }];"
+      },
+      "name": "レポート準備",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        1200
+      ],
+      "id": "bm-report-prep-001"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.microsoft.com/v1.0/me/drive/root:/経営管理/月次/{{ $json.fileName }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "options": {}
+      },
+      "name": "レポートファイル情報取得",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        680,
+        1200
+      ],
+      "id": "bm-report-fi-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const fileInfo = $input.first().json;\n  const prep = $('レポート準備').first().json;\n  const fmt = (n) => (n || 0).toLocaleString('ja-JP');\n  const getVal = (cell) => (cell && typeof cell === 'object' && 'result' in cell) ? cell.result : cell;\n  try {\n    const dlUrl = fileInfo['@microsoft.graph.downloadUrl'];\n    if (!dlUrl) return [{ json: { pushMessage: '' } }];\n    const res = await this.helpers.httpRequest({ method: 'GET', url: dlUrl, encoding: 'arraybuffer', returnFullResponse: false });\n    const wb = new ExcelJS.Workbook();\n    await wb.xlsx.load(Buffer.from(res), { useSharedStrings: false });\n    let salesTotal=0, recvTotal=0, unrecv=0, subTotal=0, unpaidT=0, expTotal=0;\n    const expCats = {};\n    const ss = wb.getWorksheet('売上管理');\n    if (ss) ss.eachRow((row, num) => {\n      if (num < 2 || !row.getCell(3).value) return;\n      const t = getVal(row.getCell(7).value) || 0;\n      const st = getVal(row.getCell(12).value);\n      salesTotal += t;\n      if (st === '入金済') recvTotal += row.getCell(11).value || 0;\n      if (st === '未入金') unrecv += t;\n    });\n    const sub = wb.getWorksheet('外注管理');\n    if (sub) sub.eachRow((row, num) => {\n      if (num < 2 || !row.getCell(3).value) return;\n      const t = getVal(row.getCell(9).value) || 0;\n      subTotal += t;\n      if (getVal(row.getCell(14).value) === '未払') unpaidT += t;\n    });\n    const es = wb.getWorksheet('経費');\n    if (es) es.eachRow((row, num) => {\n      if (num < 2) return;\n      const a = row.getCell(7).value || 0;\n      const c = row.getCell(3).value || 'その他';\n      expTotal += a; expCats[c] = (expCats[c] || 0) + a;\n    });\n    const gross = salesTotal - subTotal - expTotal;\n    const cats = Object.entries(expCats).map(([k,v]) => `    ${k}: ¥${fmt(v)}`).join('\\n');\n    const msg = `【${prep.year}年${prep.month}月 月次レポート】\\n\\n`\n      + `■売上\\n  請求済: ¥${fmt(salesTotal)}\\n  入金済: ¥${fmt(recvTotal)}\\n  未入金: ¥${fmt(unrecv)}\\n\\n`\n      + `■外注費\\n  合計: ¥${fmt(subTotal)}\\n  未払い: ¥${fmt(unpaidT)}\\n\\n`\n      + `■経費 合計: ¥${fmt(expTotal)}\\n${cats}\\n\\n`\n      + `■粗利（概算）\\n  ¥${fmt(gross)}`;\n    return [{ json: { pushMessage: msg } }];\n  } catch(e) { return [{ json: { pushMessage: '' } }]; }\n})();"
+      },
+      "name": "月次レポート生成",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        1200
+      ],
+      "id": "bm-report-proc-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lineToken = 'Bearer YOUR_EXPENSE_LINE_TOKEN';\nconst USERS = ['YOUR_USERID_NOZOE_YU', 'YOUR_USERID_NOZOE_AKIKO'];\nconst msg = $json.pushMessage;\nif (!msg || !msg.trim()) { return [{ json: { done: true, skipped: true } }]; }\nawait this.helpers.httpRequest({\n  method: 'POST', url: 'https://api.line.me/v2/bot/message/multicast',\n  headers: { 'Authorization': lineToken },\n  body: { to: USERS, messages: [{ type: 'text', text: msg }] }, json: true\n});\nreturn [{ json: { done: true } }];"
+      },
+      "name": "LINE Push（月次レポート）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        1200
+      ],
+      "id": "bm-push-report-001"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "name": "入金遅延チェックトリガー",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        1400
+      ],
+      "id": "bm-sched-alert-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date();\nconst year = now.getFullYear();\nconst month = now.getMonth() + 1;\nconst fileName = `経費管理_${year}年${String(month).padStart(2,'0')}月.xlsx`;\nreturn [{ json: { fileName, year, month } }];"
+      },
+      "name": "アラート準備",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        1400
+      ],
+      "id": "bm-alert-prep-001"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.microsoft.com/v1.0/me/drive/root:/経営管理/月次/{{ $json.fileName }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "options": {}
+      },
+      "name": "アラートファイル情報取得",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        680,
+        1400
+      ],
+      "id": "bm-alert-fi-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const fileInfo = $input.first().json;\n  const fmt = (n) => (n || 0).toLocaleString('ja-JP');\n  const getVal = (cell) => (cell && typeof cell === 'object' && 'result' in cell) ? cell.result : cell;\n  try {\n    const dlUrl = fileInfo['@microsoft.graph.downloadUrl'];\n    if (!dlUrl) return [{ json: { pushMessage: '' } }];\n    const res = await this.helpers.httpRequest({ method: 'GET', url: dlUrl, encoding: 'arraybuffer', returnFullResponse: false });\n    const wb = new ExcelJS.Workbook();\n    await wb.xlsx.load(Buffer.from(res), { useSharedStrings: false });\n    const now = new Date(); const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());\n    const alerts = [];\n    const ss = wb.getWorksheet('売上管理');\n    if (ss) ss.eachRow((row, num) => {\n      if (num < 2 || !row.getCell(3).value) return;\n      if (getVal(row.getCell(12).value) !== '未入金') return;\n      const dueCell = row.getCell(9).value;\n      if (!dueCell || typeof dueCell.getTime !== 'function') return;\n      const due = new Date(dueCell.getTime());\n      if (due < today) {\n        const days = Math.floor((today - due) / 86400000);\n        const total = getVal(row.getCell(7).value);\n        alerts.push(`⚠️ [入金遅延 ${days}日] ${row.getCell(3).value}: ¥${fmt(total)}`);\n      }\n    });\n    const sub = wb.getWorksheet('外注管理');\n    if (sub) sub.eachRow((row, num) => {\n      if (num < 2 || !row.getCell(3).value) return;\n      if (getVal(row.getCell(14).value) !== '未払') return;\n      const dueCell = getVal(row.getCell(11).value);\n      if (!dueCell || typeof dueCell.getTime !== 'function') return;\n      const due = new Date(dueCell.getTime());\n      if (due < today) {\n        const days = Math.floor((today - due) / 86400000);\n        const total = getVal(row.getCell(9).value);\n        alerts.push(`⚠️ [支払遅延 ${days}日] ${row.getCell(3).value}: ¥${fmt(total)}`);\n      }\n    });\n    if (alerts.length === 0) return [{ json: { pushMessage: '' } }];\n    const msg = '【期限超過アラート】\\n\\n' + alerts.join('\\n');\n    return [{ json: { pushMessage: msg } }];\n  } catch(e) { return [{ json: { pushMessage: '' } }]; }\n})();"
+      },
+      "name": "入金遅延チェック",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        1400
+      ],
+      "id": "bm-alert-proc-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lineToken = 'Bearer YOUR_EXPENSE_LINE_TOKEN';\nconst USERS = ['YOUR_USERID_NOZOE_YU', 'YOUR_USERID_NOZOE_AKIKO'];\nconst msg = $json.pushMessage;\nif (!msg || !msg.trim()) { return [{ json: { done: true, skipped: true } }]; }\nawait this.helpers.httpRequest({\n  method: 'POST', url: 'https://api.line.me/v2/bot/message/multicast',\n  headers: { 'Authorization': lineToken },\n  body: { to: USERS, messages: [{ type: 'text', text: msg }] }, json: true\n});\nreturn [{ json: { done: true } }];"
+      },
+      "name": "LINE Push（遅延アラート）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        1400
+      ],
+      "id": "bm-push-alert-001"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Webhook応答",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "LINEメッセージ解析",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LINEメッセージ解析": {
+      "main": [
+        [
+          {
+            "node": "バリデーション確認",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "バリデーション確認": {
+      "main": [
+        [
+          {
+            "node": "書込み照会判定",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "LINE返信（エラー）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "書込み照会判定": {
+      "main": [
+        [
+          {
+            "node": "月次ファイル情報取得（照会）",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "月次ファイル情報取得",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "月次ファイル情報取得": {
+      "main": [
+        [
+          {
+            "node": "Excel書き込み",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Excel書き込み": {
+      "main": [
+        [
+          {
+            "node": "書込み結果確認",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "アップロード": {
+      "main": [
+        [
+          {
+            "node": "成功メッセージ生成",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "成功メッセージ生成": {
+      "main": [
+        [
+          {
+            "node": "LINE返信（成功）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "月次ファイル情報取得（照会）": {
+      "main": [
+        [
+          {
+            "node": "照会処理",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "照会処理": {
+      "main": [
+        [
+          {
+            "node": "LINE返信（照会）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "書込み結果確認": {
+      "main": [
+        [
+          {
+            "node": "アップロード",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "LINE返信（エラー）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "締日リマインダートリガー": {
+      "main": [
+        [
+          {
+            "node": "リマインダー準備",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "リマインダー準備": {
+      "main": [
+        [
+          {
+            "node": "リマインダーファイル情報取得",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "リマインダーファイル情報取得": {
+      "main": [
+        [
+          {
+            "node": "リマインダー処理",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "リマインダー処理": {
+      "main": [
+        [
+          {
+            "node": "LINE Push（リマインダー）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "月次レポートトリガー": {
+      "main": [
+        [
+          {
+            "node": "レポート準備",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "レポート準備": {
+      "main": [
+        [
+          {
+            "node": "レポートファイル情報取得",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "レポートファイル情報取得": {
+      "main": [
+        [
+          {
+            "node": "月次レポート生成",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "月次レポート生成": {
+      "main": [
+        [
+          {
+            "node": "LINE Push（月次レポート）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "入金遅延チェックトリガー": {
+      "main": [
+        [
+          {
+            "node": "アラート準備",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "アラート準備": {
+      "main": [
+        [
+          {
+            "node": "アラートファイル情報取得",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "アラートファイル情報取得": {
+      "main": [
+        [
+          {
+            "node": "入金遅延チェック",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "入金遅延チェック": {
+      "main": [
+        [
+          {
+            "node": "LINE Push（遅延アラート）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
