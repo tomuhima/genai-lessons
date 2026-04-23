@@ -145,7 +145,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://graph.microsoft.com/v1.0/me/drive/items/ONEDRIVE_FOLDER_ID:/{{ $json.fileName }}",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/日報/{{ $json.fileName }}",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "microsoftDriveOAuth2Api",
         "options": {}
