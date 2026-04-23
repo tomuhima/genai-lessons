@@ -161,30 +161,7 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "=https://graph.microsoft.com/v1.0/me/drive/items/{{ $('ファイル情報取得').first().json.id }}/content",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "microsoftDriveOAuth2Api",
-        "options": {
-          "response": {
-            "response": {
-              "responseFormat": "file"
-            }
-          }
-        }
-      },
-      "name": "ファイルダウンロード",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [
-        1760,
-        240
-      ],
-      "id": "dr-download-001"
-    },
-    {
-      "parameters": {
-        "jsCode": "const ExcelJS = require('exceljs');\n\nreturn await (async () => {\n  const data     = $('Claude解析結果処理').first().json;\n  const fileInfo = $('ファイル情報取得').first().json;\n\n  try {\n    const workbook = new ExcelJS.Workbook();\n    const buffer   = await this.helpers.getBinaryDataBuffer(0, 'data');\n\n    if (!buffer || buffer.length === 0) {\n      throw new Error('Excelファイルのダウンロードに失敗しました');\n    }\n\n    await workbook.xlsx.load(buffer, { useSharedStrings: false });\n\n    const MULTI_PERSON = ['梶原通信', 'LLS電気', '株式会社トラストテクノス', '株式会社RISE'];\n    const isMulti = MULTI_PERSON.includes(data.employeeName);\n\n    const sheet = workbook.getWorksheet(data.employeeName);\n    if (!sheet) throw new Error(`シート「${data.employeeName}」が見つかりません`);\n\n    const toDate = (str) => {\n      if (!str) return null;\n      const p = str.split('/');\n      return new Date(Date.UTC(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2])));\n    };\n\n    const findOrCreateRow = () => {\n      let target = null;\n      sheet.eachRow((row, num) => {\n        if (num < 2 || target) return;\n        const cell = row.getCell(1).value;\n        if (!cell) return;\n        let rowDate = '';\n        if (cell instanceof Date) {\n          rowDate = `${cell.getUTCFullYear()}/${String(cell.getUTCMonth()+1).padStart(2,'0')}/${String(cell.getUTCDate()).padStart(2,'0')}`;\n        } else {\n          rowDate = String(cell).trim();\n        }\n        if (rowDate === data.parsedDate && !row.getCell(3).value) target = row;\n      });\n      if (!target) {\n        const n = sheet.lastRow ? sheet.lastRow.number + 1 : 2;\n        target = sheet.getRow(n);\n        target.getCell(1).value  = toDate(data.parsedDate);\n        target.getCell(1).numFmt = 'YYYY/MM/DD';\n      }\n      return target;\n    };\n\n    for (const site of data.sites) {\n      const row = findOrCreateRow();\n      row.getCell(2).value = site.companyName  || '';\n      row.getCell(3).value = site.kubun        || '';\n      row.getCell(4).value = site.propertyName || '';\n      row.getCell(5).value = site.startTime    || '';\n      row.getCell(6).value = site.endTime      || '';\n      row.getCell(7).value = site.breakMin     || 0;\n      row.getCell(8).value = site.workingTime  || '';\n      row.getCell(9).value = site.workContent  || '';\n\n      if (isMulti) {\n        row.getCell(10).value = site.personnelCount || '';\n        row.getCell(11).value = site.personnelNames || '';\n        row.getCell(12).value = site.highwayFee;\n        row.getCell(13).value = site.distance;\n        row.getCell(14).value = site.parkingFee;\n        row.getCell(15).value = site.materialFee;\n      } else {\n        row.getCell(10).value = site.highwayFee;\n        row.getCell(11).value = site.distance;\n        row.getCell(12).value = site.parkingFee;\n        row.getCell(13).value = site.materialFee;\n      }\n    }\n\n    const out = await workbook.xlsx.writeBuffer({ useSharedStrings: false });\n    const bin = await this.helpers.prepareBinaryData(\n      Buffer.from(out),\n      data.fileName,\n      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'\n    );\n\n    return [{ json: { ...data, fileId: fileInfo.id, valid: true }, binary: { data: bin } }];\n\n  } catch (err) {\n    return [{ json: { valid: false, replyToken: data.replyToken, errorMessage: err.message } }];\n  }\n})();"
+        "jsCode": "const ExcelJS = require('exceljs');\n\nreturn await (async () => {\n  const data     = $('Claude解析結果処理').first().json;\n  const fileInfo = $('ファイル情報取得').first().json;\n\n  try {\n    const workbook = new ExcelJS.Workbook();\n    const downloadUrl = fileInfo['@microsoft.graph.downloadUrl'];\n    if (!downloadUrl) throw new Error('ダウンロードURLが取得できませんでした');\n    const res = await this.helpers.httpRequest({ method: 'GET', url: downloadUrl, encoding: 'arraybuffer', returnFullResponse: false });\n    const buffer = Buffer.from(res);\n\n    await workbook.xlsx.load(buffer, { useSharedStrings: false });\n\n    const MULTI_PERSON = ['梶原通信', 'LLS電気', '株式会社トラストテクノス', '株式会社RISE'];\n    const isMulti = MULTI_PERSON.includes(data.employeeName);\n\n    const sheet = workbook.getWorksheet(data.employeeName);\n    if (!sheet) throw new Error(`シート「${data.employeeName}」が見つかりません`);\n\n    const toDate = (str) => {\n      if (!str) return null;\n      const p = str.split('/');\n      return new Date(Date.UTC(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2])));\n    };\n\n    const findOrCreateRow = () => {\n      let target = null;\n      sheet.eachRow((row, num) => {\n        if (num < 2 || target) return;\n        const cell = row.getCell(1).value;\n        if (!cell) return;\n        let rowDate = '';\n        if (cell instanceof Date) {\n          rowDate = `${cell.getUTCFullYear()}/${String(cell.getUTCMonth()+1).padStart(2,'0')}/${String(cell.getUTCDate()).padStart(2,'0')}`;\n        } else {\n          rowDate = String(cell).trim();\n        }\n        if (rowDate === data.parsedDate && !row.getCell(3).value) target = row;\n      });\n      if (!target) {\n        const n = sheet.lastRow ? sheet.lastRow.number + 1 : 2;\n        target = sheet.getRow(n);\n        target.getCell(1).value  = toDate(data.parsedDate);\n        target.getCell(1).numFmt = 'YYYY/MM/DD';\n      }\n      return target;\n    };\n\n    for (const site of data.sites) {\n      const row = findOrCreateRow();\n      row.getCell(2).value = site.companyName  || '';\n      row.getCell(3).value = site.kubun        || '';\n      row.getCell(4).value = site.propertyName || '';\n      row.getCell(5).value = site.startTime    || '';\n      row.getCell(6).value = site.endTime      || '';\n      row.getCell(7).value = site.breakMin     || 0;\n      row.getCell(8).value = site.workingTime  || '';\n      row.getCell(9).value = site.workContent  || '';\n\n      if (isMulti) {\n        row.getCell(10).value = site.personnelCount || '';\n        row.getCell(11).value = site.personnelNames || '';\n        row.getCell(12).value = site.highwayFee;\n        row.getCell(13).value = site.distance;\n        row.getCell(14).value = site.parkingFee;\n        row.getCell(15).value = site.materialFee;\n      } else {\n        row.getCell(10).value = site.highwayFee;\n        row.getCell(11).value = site.distance;\n        row.getCell(12).value = site.parkingFee;\n        row.getCell(13).value = site.materialFee;\n      }\n    }\n\n    const out = await workbook.xlsx.writeBuffer({ useSharedStrings: false });\n    const bin = await this.helpers.prepareBinaryData(\n      Buffer.from(out),\n      data.fileName,\n      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'\n    );\n\n    return [{ json: { ...data, fileId: fileInfo.id, valid: true }, binary: { data: bin } }];\n\n  } catch (err) {\n    return [{ json: { valid: false, replyToken: data.replyToken, errorMessage: err.message } }];\n  }\n})();"
       },
       "name": "Excel書き込み",
       "type": "n8n-nodes-base.code",
@@ -571,24 +548,7 @@
     },
     "ファイル情報取得": {
       "main": [
-        [
-          {
-            "node": "ファイルダウンロード",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "ファイルダウンロード": {
-      "main": [
-        [
-          {
-            "node": "Excel書き込み",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        []
       ]
     },
     "Excel書き込み": {
