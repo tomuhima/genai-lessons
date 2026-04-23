@@ -398,7 +398,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const data = $('請求集計準備').first().json;\n  const currentFI = $('請求集計ファイル情報取得（当月）').first().json;\n  let prevFI = null;\n  try { prevFI = $('請求集計ファイル情報取得（前月）').first().json; } catch(e) {}\n  const MULTI = ['梶原通信','LLS電気','株式会社トラストテクノス','株式会社RISE'];\n  const isMulti = MULTI.includes(data.companyName);\n  const highwayCol = isMulti ? 12 : 10;\n  const distanceCol = isMulti ? 13 : 11;\n  let startDate, endDate;\n  if (data.is20) {\n    const pY = data.month === 1 ? data.year - 1 : data.year;\n    const pM = data.month === 1 ? 12 : data.month - 1;\n    startDate = new Date(Date.UTC(pY, pM - 1, 21));\n    endDate = new Date(Date.UTC(data.year, data.month - 1, 20));\n  } else {\n    startDate = new Date(Date.UTC(data.year, data.month - 1, 1));\n    endDate = new Date(Date.UTC(data.year, data.month, 0));\n  }\n  const records = {};\n  const processWB = async (fi) => {\n    if (!fi || !fi['@microsoft.graph.downloadUrl']) return;\n    const res = await this.helpers.httpRequest({ method: 'GET', url: fi['@microsoft.graph.downloadUrl'], encoding: 'arraybuffer', returnFullResponse: false });\n    const wb = new ExcelJS.Workbook();\n    await wb.xlsx.load(Buffer.from(res), { useSharedStrings: false });\n    wb.eachSheet((sheet) => {\n      const empName = sheet.name;\n      sheet.eachRow((row, num) => {\n        if (num < 2) return;\n        const dateCell = row.getCell(1).value;\n        const company = row.getCell(3).value;\n        if (!company || String(company).trim() !== data.companyName) return;\n        if (!dateCell || typeof dateCell.getTime !== 'function') return;\n        const d = new Date(dateCell.getTime() + 9 * 3600000);\n        const dUTC = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));\n        if (dUTC < startDate || dUTC > endDate) return;\n        const dateStr = `${d.getUTCMonth()+1}/${d.getUTCDate()}`;\n        const shift = row.getCell(2).value || '';\n        const site = row.getCell(4).value || '';\n        const key = `${dUTC.getTime()}|${shift}|${site}`;\n        const hw = row.getCell(highwayCol).value || 0;\n        const dist = row.getCell(distanceCol).value || 0;\n        if (!records[key]) records[key] = { dateStr, shift, site, employees: [], highway: 0, distance: 0, sortKey: dUTC.getTime() };\n        if (!records[key].employees.includes(empName)) records[key].employees.push(empName);\n        records[key].highway = Math.max(records[key].highway, hw);\n        records[key].distance = Math.max(records[key].distance, dist);\n      });\n    });\n  };\n  await processWB(currentFI);\n  if (data.is20 && prevFI) await processWB(prevFI);\n  const sorted = Object.values(records).sort((a, b) => a.sortKey - b.sortKey);\n  let totalHighway = 0, totalDistance = 0;\n  const lines = sorted.map(r => {\n    totalHighway += r.highway; totalDistance += r.distance;\n    let line = `${r.dateStr}  ${r.shift}  ${r.site}  ${r.employees.join(' ')}`;\n    if (r.highway > 0) line += `  高速:¥${r.highway.toLocaleString('ja-JP')}`;\n    if (r.distance > 0) line += `  距離:${r.distance}km`;\n    return line;\n  });\n  const sM = data.is20 ? (data.month === 1 ? 12 : data.month - 1) : data.month;\n  const sD = data.is20 ? 21 : 1;\n  const eM = data.is20 ? data.month : data.month;\n  const eD = data.is20 ? 20 : new Date(data.year, data.month, 0).getDate();\n  const period = `${sM}/${sD}〜${eM}/${eD}`;\n  let msg = `【${data.companyName} 請求集計】\n期間：${period}\n\n`;\n  if (lines.length === 0) { msg += '該当する稼働記録がありません'; }\n  else {\n    msg += lines.join('\\n') + '\\n\\n────────────\\n';\n    msg += `稼働日数：${sorted.length}日`;\n    if (totalHighway > 0) msg += `\\n高速合計：¥${totalHighway.toLocaleString('ja-JP')}`;\n    if (totalDistance > 0) msg += `\\n距離合計：${totalDistance}km`;\n  }\n  return [{ json: { replyToken: data.replyToken, replyMessage: msg } }];\n})();"
+        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const data = $('請求集計準備').first().json;\n  const currentFI = $('請求集計ファイル情報取得（当月）').first().json;\n  let prevFI = null;\n  try { prevFI = $('請求集計ファイル情報取得（前月）').first().json; } catch(e) {}\n  const MULTI = ['梶原通信','LLS電気','株式会社トラストテクノス','株式会社RISE'];\n  const isMulti = MULTI.includes(data.companyName);\n  const highwayCol = isMulti ? 12 : 10;\n  const distanceCol = isMulti ? 13 : 11;\n  let startDate, endDate;\n  if (data.is20) {\n    const pY = data.month === 1 ? data.year - 1 : data.year;\n    const pM = data.month === 1 ? 12 : data.month - 1;\n    startDate = new Date(Date.UTC(pY, pM - 1, 21));\n    endDate = new Date(Date.UTC(data.year, data.month - 1, 20));\n  } else {\n    startDate = new Date(Date.UTC(data.year, data.month - 1, 1));\n    endDate = new Date(Date.UTC(data.year, data.month, 0));\n  }\n  const records = {};\n  const processWB = async (fi) => {\n    if (!fi || !fi['@microsoft.graph.downloadUrl']) return;\n    const res = await this.helpers.httpRequest({ method: 'GET', url: fi['@microsoft.graph.downloadUrl'], encoding: 'arraybuffer', returnFullResponse: false });\n    const wb = new ExcelJS.Workbook();\n    await wb.xlsx.load(Buffer.from(res), { useSharedStrings: false });\n    wb.eachSheet((sheet) => {\n      const empName = sheet.name;\n      sheet.eachRow((row, num) => {\n        if (num < 2) return;\n        const dateCell = row.getCell(1).value;\n        const company = row.getCell(3).value;\n        if (!company || String(company).trim() !== data.companyName) return;\n        if (!dateCell || typeof dateCell.getTime !== 'function') return;\n        const d = new Date(dateCell.getTime() + 9 * 3600000);\n        const dUTC = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));\n        if (dUTC < startDate || dUTC > endDate) return;\n        const dateStr = `${d.getUTCMonth()+1}/${d.getUTCDate()}`;\n        const shift = row.getCell(2).value || '';\n        const site = row.getCell(4).value || '';\n        const key = `${dUTC.getTime()}|${shift}|${site}`;\n        const hw = row.getCell(highwayCol).value || 0;\n        const dist = row.getCell(distanceCol).value || 0;\n        if (!records[key]) records[key] = { dateStr, shift, site, employees: [], highway: 0, distance: 0, sortKey: dUTC.getTime() };\n        if (!records[key].employees.includes(empName)) records[key].employees.push(empName);\n        records[key].highway = Math.max(records[key].highway, hw);\n        records[key].distance = Math.max(records[key].distance, dist);\n      });\n    });\n  };\n  await processWB(currentFI);\n  if (data.is20 && prevFI) await processWB(prevFI);\n  const sorted = Object.values(records).sort((a, b) => a.sortKey - b.sortKey);\n  let totalHighway = 0, totalDistance = 0;\n  const lines = sorted.map(r => {\n    totalHighway += r.highway; totalDistance += r.distance;\n    let line = `${r.dateStr}  ${r.shift}  ${r.site}  ${r.employees.join(' ')}`;\n    if (r.highway > 0) line += `  高速:¥${r.highway.toLocaleString('ja-JP')}`;\n    if (r.distance > 0) line += `  距離:${r.distance}km`;\n    return line;\n  });\n  const sM = data.is20 ? (data.month === 1 ? 12 : data.month - 1) : data.month;\n  const sD = data.is20 ? 21 : 1;\n  const eM = data.is20 ? data.month : data.month;\n  const eD = data.is20 ? 20 : new Date(data.year, data.month, 0).getDate();\n  const period = `${sM}/${sD}〜${eM}/${eD}`;\n  let msg = `【${data.companyName} 請求集計】\n期間：${period}\n\n`;\n  if (lines.length === 0) { msg += '該当する稼働記録がありません'; }\n  else {\n    msg += lines.join('\\n') + '\\n\\n────────────\\n';\n    msg += `稼働日数：${sorted.length}日`;\n    if (totalHighway > 0) msg += `\\n高速合計：¥${totalHighway.toLocaleString('ja-JP')}`;\n    if (totalDistance > 0) msg += `\\n距離合計：${totalDistance}km`;\n  }\n  const billingFileName = `請求集計_${data.year}年${String(data.month).padStart(2,'0')}月.xlsx`;\n  return [{ json: { replyToken: data.replyToken, replyMessage: msg, records: sorted, companyName: data.companyName, billingFileName, year: data.year, month: data.month } }];\n})();"
       },
       "name": "請求集計処理",
       "type": "n8n-nodes-base.code",
@@ -417,10 +417,70 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1780,
+        2440,
         280
       ],
       "id": "dr-billing-reply-001"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/請求集計/{{ $json.billingFileName }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "options": {},
+        "onError": "continueRegularOutput"
+      },
+      "name": "請求集計Excelファイル情報取得",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1780,
+        280
+      ],
+      "id": "dr-billing-excel-fi-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const data = $('請求集計処理').first().json;\n  const fileInfo = $input.first().json;\n  const wb = new ExcelJS.Workbook();\n  // 既存ファイルがあれば読み込む\n  if (fileInfo['@microsoft.graph.downloadUrl']) {\n    try {\n      const res = await this.helpers.httpRequest({ method: 'GET', url: fileInfo['@microsoft.graph.downloadUrl'], encoding: 'arraybuffer', returnFullResponse: false });\n      await wb.xlsx.load(Buffer.from(res), { useSharedStrings: false });\n    } catch(e) { /* 読み込み失敗時は新規作成 */ }\n  }\n  // シート取得または作成\n  let sheet = wb.getWorksheet(data.companyName);\n  if (sheet) {\n    // シートをクリア（ヘッダー以外）\n    const rows = [];\n    sheet.eachRow((row, num) => { if (num >= 2) rows.push(num); });\n    rows.reverse().forEach(num => sheet.spliceRows(num, 1));\n  } else {\n    sheet = wb.addWorksheet(data.companyName);\n    // ヘッダー行\n    const hdr = sheet.getRow(1);\n    hdr.getCell(1).value = '日付';\n    hdr.getCell(2).value = '区分';\n    hdr.getCell(3).value = '現場名';\n    hdr.getCell(4).value = '人員名';\n    hdr.getCell(5).value = '高速(円)';\n    hdr.getCell(6).value = '距離(km)';\n    hdr.commit();\n  }\n  // データ書き込み\n  let rowNum = 2;\n  for (const rec of data.records) {\n    const row = sheet.getRow(rowNum++);\n    row.getCell(1).value = rec.dateStr;\n    row.getCell(2).value = rec.shift;\n    row.getCell(3).value = rec.site;\n    row.getCell(4).value = rec.employees.join(' ');\n    row.getCell(5).value = rec.highway || 0;\n    row.getCell(6).value = rec.distance || 0;\n    row.commit();\n  }\n  const buf = await wb.xlsx.writeBuffer({ useSharedStrings: false });\n  const bin = await this.helpers.prepareBinaryData(Buffer.from(buf), data.billingFileName, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');\n  return [{ json: { ...data }, binary: { data: bin } }];\n})();"
+      },
+      "name": "請求集計Excel書き込み",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        280
+      ],
+      "id": "dr-billing-excel-write-001"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/請求集計/{{ $json.billingFileName }}:/content",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "請求集計アップロード",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2220,
+        280
+      ],
+      "id": "dr-billing-upload-001"
     }
   ],
   "connections": {
@@ -634,6 +694,39 @@
       ]
     },
     "請求集計処理": {
+      "main": [
+        [
+          {
+            "node": "請求集計Excelファイル情報取得",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計Excelファイル情報取得": {
+      "main": [
+        [
+          {
+            "node": "請求集計Excel書き込み",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計Excel書き込み": {
+      "main": [
+        [
+          {
+            "node": "請求集計アップロード",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計アップロード": {
       "main": [
         [
           {
