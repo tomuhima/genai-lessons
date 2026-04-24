@@ -412,21 +412,21 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
       "position": [
-        2640,
-        340
+        2860,
+        380
       ],
       "id": "dr-billing-excel-fi-001"
     },
     {
       "parameters": {
-        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const fileInfo = $input.first().json;\n  const billing = $('請求集計書き込み準備').first().json;\n\n  if (!billing.hasBilling) return [{ json: { ...billing } }];\n\n  const normalize = (name) =>\n    (name || '').replace(/株式会社|有限会社|合同会社|一般社団法人|一般財団法人/g, '').trim();\n\n  const wb = new ExcelJS.Workbook();\n  if (fileInfo['@microsoft.graph.downloadUrl']) {\n    try {\n      const res = await this.helpers.httpRequest({\n        method: 'GET', url: fileInfo['@microsoft.graph.downloadUrl'],\n        encoding: 'arraybuffer', returnFullResponse: false\n      });\n      await wb.xlsx.load(Buffer.from(res), { useSharedStrings: false });\n    } catch(e) {}\n  }\n\n  for (const site of billing.billingSites) {\n    const sheetName = normalize(site.companyName);\n    let sheet = wb.getWorksheet(sheetName);\n    if (!sheet) {\n      sheet = wb.addWorksheet(sheetName);\n      const hdr = sheet.getRow(1);\n      hdr.getCell(1).value = '日付';\n      hdr.getCell(2).value = '区分';\n      hdr.getCell(3).value = '現場名';\n      hdr.getCell(4).value = '人員名';\n      hdr.getCell(5).value = '高速(円)';\n      hdr.getCell(6).value = '距離(km)';\n      hdr.commit();\n    }\n    let lastRow = 1;\n    sheet.eachRow((row, num) => { lastRow = num; });\n    const newRow = sheet.getRow(lastRow + 1);\n    newRow.getCell(1).value = billing.parsedDate;\n    newRow.getCell(2).value = site.shift || '';\n    newRow.getCell(3).value = site.propertyName || '';\n    newRow.getCell(4).value = billing.employeeName || '';\n    newRow.getCell(5).value = site.highwayFee || 0;\n    newRow.getCell(6).value = site.distance || 0;\n    newRow.commit();\n  }\n\n  const buf = await wb.xlsx.writeBuffer({ useSharedStrings: false });\n  const bin = await this.helpers.prepareBinaryData(\n    Buffer.from(buf), billing.billingFileName,\n    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'\n  );\n  return [{ json: { ...billing }, binary: { data: bin } }];\n})();"
+        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const fileInfo = $input.first().json;\n  const billing = $('請求集計書き込み準備').first().json;\n\n  if (!billing || !billing.hasBilling) return [{ json: { hasBilling: false } }];\n\n  const normalize = (name) =>\n    (name || '').replace(/株式会社|有限会社|合同会社|一般社団法人|一般財団法人/g, '').trim();\n\n  const wb = new ExcelJS.Workbook();\n  if (fileInfo['@microsoft.graph.downloadUrl']) {\n    try {\n      const res = await this.helpers.httpRequest({\n        method: 'GET', url: fileInfo['@microsoft.graph.downloadUrl'],\n        encoding: 'arraybuffer', returnFullResponse: false\n      });\n      await wb.xlsx.load(Buffer.from(res), { useSharedStrings: false });\n    } catch(e) {}\n  }\n\n  for (const site of billing.billingSites) {\n    const sheetName = normalize(site.companyName);\n    let sheet = wb.getWorksheet(sheetName);\n    if (!sheet) {\n      sheet = wb.addWorksheet(sheetName);\n      const hdr = sheet.getRow(1);\n      hdr.getCell(1).value = '日付';\n      hdr.getCell(2).value = '区分';\n      hdr.getCell(3).value = '現場名';\n      hdr.getCell(4).value = '人員名';\n      hdr.getCell(5).value = '高速(円)';\n      hdr.getCell(6).value = '距離(km)';\n      hdr.commit();\n    }\n    let lastRow = 1;\n    sheet.eachRow((row, num) => { lastRow = num; });\n    const newRow = sheet.getRow(lastRow + 1);\n    newRow.getCell(1).value = billing.parsedDate;\n    newRow.getCell(2).value = site.shift || '';\n    newRow.getCell(3).value = site.propertyName || '';\n    newRow.getCell(4).value = billing.employeeName || '';\n    newRow.getCell(5).value = site.highwayFee || 0;\n    newRow.getCell(6).value = site.distance || 0;\n    newRow.commit();\n  }\n\n  const buf = await wb.xlsx.writeBuffer({ useSharedStrings: false });\n  const bin = await this.helpers.prepareBinaryData(\n    Buffer.from(buf), billing.billingFileName,\n    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'\n  );\n  return [{ json: { ...billing }, binary: { data: bin } }];\n})();"
       },
       "name": "請求集計Excel書き込み",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2860,
-        340
+        3080,
+        380
       ],
       "id": "dr-billing-excel-write-001"
     },
@@ -455,7 +455,7 @@
       "typeVersion": 4,
       "position": [
         3300,
-        280
+        380
       ],
       "id": "dr-billing-upload-001"
     },
@@ -466,10 +466,10 @@
       "typeVersion": 2,
       "position": [
         2420,
-        340
+        380
       ],
       "parameters": {
-        "jsCode": "return await (async () => {\n  const item = $input.first();\n  const data = item.json;\n\n  const normalize = (name) =>\n    (name || '').replace(/株式会社|有限会社|合同会社|一般社団法人|一般財団法人/g, '').trim();\n\n  const BILLING_COMPANIES = [\n    '港振興業', 'トラストテクノス', '平成システム', 'FGE',\n    'mtr', 'オークコミュニケーション', 'ライズ',\n    '千里スカイハイツ管理組合', '菊次', 'ページ'\n  ];\n\n  const parts = (data.parsedDate || '').split('/');\n  const year = parseInt(parts[0]) || 0;\n  const month = parseInt(parts[1]) || 0;\n  const billingFileName = `請求集計_${year}年${String(month).padStart(2,'0')}月.xlsx`;\n\n  const billingSites = (data.sites || []).filter(site => {\n    const normalized = normalize(site.companyName);\n    return BILLING_COMPANIES.some(c => normalized.includes(c) || c.includes(normalized));\n  });\n\n  // バイナリをファイルシステムから正しく読み直してパススルー\n  const binaryBuffer = await this.helpers.getBinaryDataBuffer(0, 'data');\n  const binaryInfo = item.binary.data;\n  const bin = await this.helpers.prepareBinaryData(\n    binaryBuffer,\n    binaryInfo.fileName || 'file.xlsx',\n    binaryInfo.mimeType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'\n  );\n\n  return [{\n    json: { ...data, year, month, billingFileName, billingSites, hasBilling: billingSites.length > 0 },\n    binary: { data: bin }\n  }];\n})();"
+        "jsCode": "const data = $input.first().json;\n\nconst normalize = (name) =>\n  (name || '').replace(/株式会社|有限会社|合同会社|一般社団法人|一般財団法人/g, '').trim();\n\nconst BILLING_COMPANIES = [\n  '港振興業', 'トラストテクノス', '平成システム', 'FGE',\n  'mtr', 'オークコミュニケーション', 'ライズ',\n  '千里スカイハイツ管理組合', '菊次', 'ページ'\n];\n\nconst parts = (data.parsedDate || '').split('/');\nconst year = parseInt(parts[0]) || 0;\nconst month = parseInt(parts[1]) || 0;\nconst billingFileName = `請求集計_${year}年${String(month).padStart(2,'0')}月.xlsx`;\n\nconst billingSites = (data.sites || []).filter(site => {\n  const normalized = normalize(site.companyName);\n  return BILLING_COMPANIES.some(c => normalized.includes(c) || c.includes(normalized));\n});\n\nreturn [{ json: { ...data, year, month, billingFileName, billingSites, hasBilling: billingSites.length > 0 }}];"
       }
     },
     {
@@ -478,8 +478,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        3080,
-        340
+        2640,
+        380
       ],
       "parameters": {
         "conditions": {
@@ -602,6 +602,11 @@
       "main": [
         [
           {
+            "node": "アップロード",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "請求集計書き込み準備",
             "type": "main",
             "index": 0
@@ -620,7 +625,7 @@
       "main": [
         [
           {
-            "node": "請求集計Excelファイル情報取得",
+            "node": "成功返信生成",
             "type": "main",
             "index": 0
           }
@@ -704,7 +709,7 @@
       "main": [
         [
           {
-            "node": "請求集計チェック",
+            "node": "請求集計アップロード",
             "type": "main",
             "index": 0
           }
@@ -713,20 +718,14 @@
     },
     "請求集計アップロード": {
       "main": [
-        [
-          {
-            "node": "成功返信生成",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        []
       ]
     },
     "請求集計書き込み準備": {
       "main": [
         [
           {
-            "node": "アップロード",
+            "node": "請求集計チェック",
             "type": "main",
             "index": 0
           }
@@ -737,18 +736,12 @@
       "main": [
         [
           {
-            "node": "請求集計アップロード",
+            "node": "請求集計Excelファイル情報取得",
             "type": "main",
             "index": 0
           }
         ],
-        [
-          {
-            "node": "成功返信生成",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        []
       ]
     }
   },
