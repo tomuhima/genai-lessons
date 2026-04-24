@@ -75,3 +75,66 @@ Uadfb98160637cc7f96bccb051c4a51f9 → 梶原通信
 
 - ファイルパス：`/home/user/genai-lessons/workflows/business_management_workflow_v2.json`
 - プレースホルダー：YOUR_EXPENSE_LINE_TOKEN, YOUR_CLAUDE_API_KEY, YOUR_USERID_NOZOE_YU, YOUR_USERID_NOZOE_AKIKO
+
+---
+
+## 動作確認済みコードパターン
+
+### LINE返信（Codeノード）
+```javascript
+const lineToken = 'Bearer XXXXXXX'; // 実際のトークンに置き換え
+const data = $input.first().json;
+if (data.replyToken) {
+  await this.helpers.httpRequest({
+    method: 'POST',
+    url: 'https://api.line.me/v2/bot/message/reply',
+    headers: { 'Authorization': lineToken },
+    body: { replyToken: data.replyToken, messages: [{ type: 'text', text: data.replyMessage }] },
+    json: true
+  });
+}
+return [{ json: { done: true } }];
+```
+
+### OneDriveファイル情報取得（HTTP Requestノード）
+- 方法：GET
+- URL：`=https://graph.microsoft.com/v1.0/me/drive/root:/日報/{{ $json.fileName }}`
+- 認証：Predefined Credential Type → Microsoft Drive OAuth2 API
+
+### OneDriveアップロード（HTTP Requestノード）
+- 方法：PUT
+- URL：`=https://graph.microsoft.com/v1.0/me/drive/items/{{ $('ファイル情報取得').first().json.id }}/content`
+- 認証：Predefined Credential Type → Microsoft Drive OAuth2 API
+
+### ExcelJSでファイル読み込み（Codeノード）
+```javascript
+const ExcelJS = require('exceljs');
+const fileInfo = $('ファイル情報取得').first().json;
+const downloadUrl = fileInfo['@microsoft.graph.downloadUrl'];
+if (!downloadUrl) throw new Error('ダウンロードURLが取得できませんでした');
+const res = await this.helpers.httpRequest({
+  method: 'GET', url: downloadUrl, encoding: 'arraybuffer', returnFullResponse: false
+});
+const workbook = new ExcelJS.Workbook();
+await workbook.xlsx.load(Buffer.from(res), { useSharedStrings: false });
+```
+
+### Excel日付セルの判定
+```javascript
+const getVal = (cell) => (cell && typeof cell === 'object' && 'result' in cell) ? cell.result : cell;
+if (typeof dateCell.getTime === 'function') { /* 日付セル */ }
+```
+
+### ExcelJSでバイナリ出力してアップロード
+```javascript
+const out = await workbook.xlsx.writeBuffer({ useSharedStrings: false });
+const bin = await this.helpers.prepareBinaryData(
+  Buffer.from(out), fileName,
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+);
+return [{ json: { ...data }, binary: { data: bin } }];
+```
+
+### 新規Excelファイル作成（パスベースPUT）
+- URL：`=https://graph.microsoft.com/v1.0/me/drive/root:/請求集計/{{ $json.billingFileName }}:/content`
+- 方法：PUT（ファイルが存在しなくても自動作成される）
