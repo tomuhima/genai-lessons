@@ -100,7 +100,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/経営管理/月次/{{ $json.fileName }}",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/経費管理/{{ $json.fileName }}",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "microsoftDriveOAuth2Api",
         "options": {}
@@ -117,7 +117,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/経営管理/月次/{{ $('LINEメッセージ解析').first().json.fileName }}",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/経費管理/{{ $('LINEメッセージ解析').first().json.fileName }}",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "microsoftDriveOAuth2Api",
         "options": {}
@@ -297,7 +297,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://graph.microsoft.com/v1.0/me/drive/root:/経営管理/月次/{{ $json.fileName }}",
+        "url": "https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/経費管理/{{ $json.fileName }}",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "microsoftDriveOAuth2Api",
         "options": {}
@@ -373,7 +373,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://graph.microsoft.com/v1.0/me/drive/root:/経営管理/月次/{{ $json.fileName }}",
+        "url": "https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/経費管理/{{ $json.fileName }}",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "microsoftDriveOAuth2Api",
         "options": {}
@@ -449,7 +449,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://graph.microsoft.com/v1.0/me/drive/root:/経営管理/月次/{{ $json.fileName }}",
+        "url": "https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/経費管理/{{ $json.fileName }}",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "microsoftDriveOAuth2Api",
         "options": {}
