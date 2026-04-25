@@ -79,8 +79,8 @@ with open('path/to/file.json', 'w', encoding='utf-8') as f:
 
 - ファイルパス：`/home/user/genai-lessons/workflows/daily_report_workflow_v2.json`
 - Webhook URL：`https://n8n-light-mn.xvps.jp/webhook/daily-report`
-- OneDriveパス：`/日報/稼働表_YYYY年MM月.xlsx`
-- 請求集計パス：`/請求集計/請求集計_YYYY年MM月.xlsx`
+- OneDriveパス：`/業務管理システム/日報/稼働表_YYYY年MM月.xlsx`
+- 請求集計パス：`/業務管理システム/請求集計/請求集計_YYYY年MM月.xlsx`
 
 ### EMPLOYEE_MAP（LINE UserID → 名前）
 ```
@@ -134,7 +134,7 @@ return [{ json: { done: true } }];
 
 ### OneDriveファイル情報取得（HTTP Requestノード）
 - 方法：GET
-- URL：`=https://graph.microsoft.com/v1.0/me/drive/root:/日報/{{ $json.fileName }}`
+- URL：`=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/日報/{{ $json.fileName }}`
 - 認証：Predefined Credential Type → Microsoft Drive OAuth2 API
 
 ### OneDriveアップロード（HTTP Requestノード）
@@ -172,5 +172,5 @@ return [{ json: { ...data }, binary: { data: bin } }];
 ```
 
 ### 新規Excelファイル作成（パスベースPUT）
-- URL：`=https://graph.microsoft.com/v1.0/me/drive/root:/請求集計/{{ $json.billingFileName }}:/content`
+- URL：`=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/請求集計/{{ $json.billingFileName }}:/content`
 - 方法：PUT（ファイルが存在しなくても自動作成される）
