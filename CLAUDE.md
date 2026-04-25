@@ -31,6 +31,32 @@ with open('path/to/file.json', 'w', encoding='utf-8') as f:
 
 ---
 
+## ドキュメントファイルの管理ルール
+
+### 全チャットから参照できるようにする方法
+ローカルブランチにコミットしただけでは他のチャットからファイルが見えない。
+**重要なdocsファイルは必ずmainブランチにも直接プッシュする。**
+
+#### 手順（成功パターン）
+1. ローカルにファイルを作成・Read
+2. `mcp__github__get_file_contents`でmainブランチに既存ファイルか確認（SHAを取得）
+3. `mcp__github__create_or_update_file`でmainブランチに直接コミット
+   - 新規ファイル：shaパラメータ不要
+   - 既存ファイル：sha必須（ステップ2で取得したSHAを使う）
+
+#### 絶対にやらないこと
+- フィーチャーブランチにのみコミットして「保存した」と言わない
+- docsの引き継ぎファイルをmain以外にだけ置かない
+
+### docsディレクトリの現ファイル（mainブランチ）
+| ファイル | 内容 |
+|----------|------|
+| `docs/daily_report_business_summary.md` | 日報システム引き継ぎ・ビジネス展開資料 |
+| `docs/business_management_summary.md` | 経営管理システム引き継ぎ資料 |
+| `docs/integration_design_notes.md` | 両システム連携設計メモ |
+
+---
+
 ## n8nワークフロー作業ルール
 
 - n8nはバージョン2.14.2（Self Hosted）、Dockerで動作
