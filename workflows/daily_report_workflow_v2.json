@@ -509,19 +509,6 @@
       "parameters": {
         "jsCode": "return await (async () => {\n  const lineToken = 'Bearer DKt6qGilWRHXrKlH9W6OTHsIStuvR9BQ9h+DG7LN/5Iit59+sk1wNF+rGWOD9SX687OmB/TF5jpNnXkDSiR31Rm23yc0aLJFzL93ljoBHvUQOrS14Pi2d5ixBmlrG5VJh0vpGuno4BAaIu35GsL0NwdB04t89/1O/w1cDnyilFU=';\n  const NOZOE_ID = 'Uc1e1e958fb952752c3d34628a17585a1';\n\n  let fileName = '';\n  let companyNames = '';\n  try {\n    const billing = $('請求集計書き込み準備').first().json;\n    fileName = billing.billingFileName || '';\n    companyNames = (billing.billingSites || []).map(s => s.companyName).join('、');\n  } catch(e) {}\n\n  const msg = fileName\n    ? `請求集計を更新しました\\nファイル: ${fileName}\\n対象会社: ${companyNames}`\n    : '請求集計を更新しました';\n\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/push',\n    headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n    body: { to: NOZOE_ID, messages: [{ type: 'text', text: msg }] },\n    json: true\n  });\n\n  return [{ json: { done: true } }];\n})();"
       }
-    },
-    {
-      "parameters": {
-        "jsCode": "await new Promise(resolve => setTimeout(resolve, 3000));\nreturn $input.all();"
-      },
-      "name": "待機（ロック回避）",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2310,
-        60
-      ],
-      "id": "wait-lock-avoid-001"
     }
   ],
   "connections": {
@@ -636,7 +623,7 @@
       "main": [
         [
           {
-            "node": "待機（ロック回避）",
+            "node": "アップロード",
             "type": "main",
             "index": 0
           },
@@ -782,17 +769,6 @@
           }
         ],
         []
-      ]
-    },
-    "待機（ロック回避）": {
-      "main": [
-        [
-          {
-            "node": "アップロード",
-            "type": "main",
-            "index": 0
-          }
-        ]
       ]
     }
   },
