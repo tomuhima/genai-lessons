@@ -145,7 +145,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/日報/{{ $json.fileName }}",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/日報/{{ $json.fileName }}",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "microsoftDriveOAuth2Api",
         "options": {}
@@ -335,7 +335,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/日報/{{ $json.fileName }}",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/日報/{{ $json.fileName }}",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "microsoftDriveOAuth2Api",
         "options": {}
@@ -352,7 +352,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/日報/{{ $json.prevFileName }}",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/日報/{{ $json.prevFileName }}",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "microsoftDriveOAuth2Api",
         "options": {
@@ -402,7 +402,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/請求集計/{{ $json.billingFileName }}",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/請求集計/{{ $json.billingFileName }}",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "microsoftDriveOAuth2Api",
         "options": {},
@@ -433,7 +433,7 @@
     {
       "parameters": {
         "method": "PUT",
-        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/請求集計/{{ $json.billingFileName }}:/content",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/請求集計/{{ $json.billingFileName }}:/content",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "microsoftDriveOAuth2Api",
         "sendBody": true,
