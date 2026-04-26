@@ -129,7 +129,8 @@
         1120,
         440
       ],
-      "id": "bm-fileinfo-002"
+      "id": "bm-fileinfo-002",
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
