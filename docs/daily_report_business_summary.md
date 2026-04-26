@@ -14,7 +14,7 @@
 - UI：LINE公式アカウント
 - AI解析：Claude API（claude-sonnet-4-6）
 - ストレージ：OneDrive（Microsoft 365）
-- n8n URL：https://n8n-light-mn.xvps.jp
+- n8n URL：https://n8n-light-m-n.xvps.jp
 
 ### 機能① 日報受付・記録
 - LINEにテキストで日報送信
