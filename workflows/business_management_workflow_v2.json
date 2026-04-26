@@ -201,7 +201,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const lineToken = 'Bearer Bearer hoTr1JKdr9gU2d0t7gqwHL87fIBVv6TopFIMTVzjBncyUIHEjY5jes3+oZH1WmC8tR58LwxKD+s6KaYp6ok+mPxGsCEbxQzeHF1yGfX/BLLhM51R5PIIfy4VtDbGBKHXTHi8ls5KwMf7jEN7dg/LTAdB04t89/1O/w1cDnyilFU=';\nconst replyToken = $json.replyToken;\nconst text = $json.replyMessage || 'お疲れ様です';\nif (replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST', url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken },\n    body: { replyToken, messages: [{ type: 'text', text }] }, json: true\n  });\n}\nreturn [{ json: { done: true } }];"
+        "jsCode": "const lineToken = 'Bearer hoTr1JKdr9gU2d0t7gqwHL87fIBVv6TopFIMTVzjBncyUIHEjY5jes3+oZH1WmC8tR58LwxKD+s6KaYp6ok+mPxGsCEbxQzeHF1yGfX/BLLhM51R5PIIfy4VtDbGBKHXTHi8ls5KwMf7jEN7dg/LTAdB04t89/1O/w1cDnyilFU=';\nconst replyToken = $json.replyToken;\nconst text = $json.replyMessage || 'お疲れ様です';\nif (replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST', url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken },\n    body: { replyToken, messages: [{ type: 'text', text }] }, json: true\n  });\n}\nreturn [{ json: { done: true } }];"
       },
       "name": "LINE返信（成功）",
       "type": "n8n-nodes-base.code",
@@ -214,7 +214,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const lineToken = 'Bearer Bearer hoTr1JKdr9gU2d0t7gqwHL87fIBVv6TopFIMTVzjBncyUIHEjY5jes3+oZH1WmC8tR58LwxKD+s6KaYp6ok+mPxGsCEbxQzeHF1yGfX/BLLhM51R5PIIfy4VtDbGBKHXTHi8ls5KwMf7jEN7dg/LTAdB04t89/1O/w1cDnyilFU=';\nconst replyToken = $json.replyToken;\nconst text = $json.replyMessage || '照会結果';\nif (replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST', url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken },\n    body: { replyToken, messages: [{ type: 'text', text }] }, json: true\n  });\n}\nreturn [{ json: { done: true } }];"
+        "jsCode": "const lineToken = 'Bearer hoTr1JKdr9gU2d0t7gqwHL87fIBVv6TopFIMTVzjBncyUIHEjY5jes3+oZH1WmC8tR58LwxKD+s6KaYp6ok+mPxGsCEbxQzeHF1yGfX/BLLhM51R5PIIfy4VtDbGBKHXTHi8ls5KwMf7jEN7dg/LTAdB04t89/1O/w1cDnyilFU=';\nconst replyToken = $json.replyToken;\nconst text = $json.replyMessage || '照会結果';\nif (replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST', url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken },\n    body: { replyToken, messages: [{ type: 'text', text }] }, json: true\n  });\n}\nreturn [{ json: { done: true } }];"
       },
       "name": "LINE返信（照会）",
       "type": "n8n-nodes-base.code",
@@ -227,7 +227,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const lineToken = 'Bearer Bearer hoTr1JKdr9gU2d0t7gqwHL87fIBVv6TopFIMTVzjBncyUIHEjY5jes3+oZH1WmC8tR58LwxKD+s6KaYp6ok+mPxGsCEbxQzeHF1yGfX/BLLhM51R5PIIfy4VtDbGBKHXTHi8ls5KwMf7jEN7dg/LTAdB04t89/1O/w1cDnyilFU=';\nconst replyToken = $json.replyToken;\nconst text = $json.errorMessage || '❌ エラーが発生しました\\nもう一度送信してください';\nif (replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST', url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken },\n    body: { replyToken, messages: [{ type: 'text', text }] }, json: true\n  });\n}\nreturn [{ json: { done: true } }];"
+        "jsCode": "const lineToken = 'Bearer hoTr1JKdr9gU2d0t7gqwHL87fIBVv6TopFIMTVzjBncyUIHEjY5jes3+oZH1WmC8tR58LwxKD+s6KaYp6ok+mPxGsCEbxQzeHF1yGfX/BLLhM51R5PIIfy4VtDbGBKHXTHi8ls5KwMf7jEN7dg/LTAdB04t89/1O/w1cDnyilFU=';\nconst replyToken = $json.replyToken;\nconst text = $json.errorMessage || '❌ エラーが発生しました\\nもう一度送信してください';\nif (replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST', url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken },\n    body: { replyToken, messages: [{ type: 'text', text }] }, json: true\n  });\n}\nreturn [{ json: { done: true } }];"
       },
       "name": "LINE返信（エラー）",
       "type": "n8n-nodes-base.code",
@@ -326,7 +326,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const lineToken = 'Bearer Bearer hoTr1JKdr9gU2d0t7gqwHL87fIBVv6TopFIMTVzjBncyUIHEjY5jes3+oZH1WmC8tR58LwxKD+s6KaYp6ok+mPxGsCEbxQzeHF1yGfX/BLLhM51R5PIIfy4VtDbGBKHXTHi8ls5KwMf7jEN7dg/LTAdB04t89/1O/w1cDnyilFU=';\nconst USERS = ['Uc1e1e958fb952752c3d34628a17585a1', 'YOUR_USERID_NOZOE_AKIKO'];\nconst msg = $json.pushMessage;\nif (!msg || !msg.trim()) { return [{ json: { done: true, skipped: true } }]; }\nawait this.helpers.httpRequest({\n  method: 'POST', url: 'https://api.line.me/v2/bot/message/multicast',\n  headers: { 'Authorization': lineToken },\n  body: { to: USERS, messages: [{ type: 'text', text: msg }] }, json: true\n});\nreturn [{ json: { done: true } }];"
+        "jsCode": "const lineToken = 'Bearer hoTr1JKdr9gU2d0t7gqwHL87fIBVv6TopFIMTVzjBncyUIHEjY5jes3+oZH1WmC8tR58LwxKD+s6KaYp6ok+mPxGsCEbxQzeHF1yGfX/BLLhM51R5PIIfy4VtDbGBKHXTHi8ls5KwMf7jEN7dg/LTAdB04t89/1O/w1cDnyilFU=';\nconst USERS = ['Uc1e1e958fb952752c3d34628a17585a1', 'YOUR_USERID_NOZOE_AKIKO'];\nconst msg = $json.pushMessage;\nif (!msg || !msg.trim()) { return [{ json: { done: true, skipped: true } }]; }\nawait this.helpers.httpRequest({\n  method: 'POST', url: 'https://api.line.me/v2/bot/message/multicast',\n  headers: { 'Authorization': lineToken },\n  body: { to: USERS, messages: [{ type: 'text', text: msg }] }, json: true\n});\nreturn [{ json: { done: true } }];"
       },
       "name": "LINE Push（リマインダー）",
       "type": "n8n-nodes-base.code",
@@ -402,7 +402,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const lineToken = 'Bearer Bearer hoTr1JKdr9gU2d0t7gqwHL87fIBVv6TopFIMTVzjBncyUIHEjY5jes3+oZH1WmC8tR58LwxKD+s6KaYp6ok+mPxGsCEbxQzeHF1yGfX/BLLhM51R5PIIfy4VtDbGBKHXTHi8ls5KwMf7jEN7dg/LTAdB04t89/1O/w1cDnyilFU=';\nconst USERS = ['Uc1e1e958fb952752c3d34628a17585a1', 'YOUR_USERID_NOZOE_AKIKO'];\nconst msg = $json.pushMessage;\nif (!msg || !msg.trim()) { return [{ json: { done: true, skipped: true } }]; }\nawait this.helpers.httpRequest({\n  method: 'POST', url: 'https://api.line.me/v2/bot/message/multicast',\n  headers: { 'Authorization': lineToken },\n  body: { to: USERS, messages: [{ type: 'text', text: msg }] }, json: true\n});\nreturn [{ json: { done: true } }];"
+        "jsCode": "const lineToken = 'Bearer hoTr1JKdr9gU2d0t7gqwHL87fIBVv6TopFIMTVzjBncyUIHEjY5jes3+oZH1WmC8tR58LwxKD+s6KaYp6ok+mPxGsCEbxQzeHF1yGfX/BLLhM51R5PIIfy4VtDbGBKHXTHi8ls5KwMf7jEN7dg/LTAdB04t89/1O/w1cDnyilFU=';\nconst USERS = ['Uc1e1e958fb952752c3d34628a17585a1', 'YOUR_USERID_NOZOE_AKIKO'];\nconst msg = $json.pushMessage;\nif (!msg || !msg.trim()) { return [{ json: { done: true, skipped: true } }]; }\nawait this.helpers.httpRequest({\n  method: 'POST', url: 'https://api.line.me/v2/bot/message/multicast',\n  headers: { 'Authorization': lineToken },\n  body: { to: USERS, messages: [{ type: 'text', text: msg }] }, json: true\n});\nreturn [{ json: { done: true } }];"
       },
       "name": "LINE Push（月次レポート）",
       "type": "n8n-nodes-base.code",
@@ -478,7 +478,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const lineToken = 'Bearer Bearer hoTr1JKdr9gU2d0t7gqwHL87fIBVv6TopFIMTVzjBncyUIHEjY5jes3+oZH1WmC8tR58LwxKD+s6KaYp6ok+mPxGsCEbxQzeHF1yGfX/BLLhM51R5PIIfy4VtDbGBKHXTHi8ls5KwMf7jEN7dg/LTAdB04t89/1O/w1cDnyilFU=';\nconst USERS = ['Uc1e1e958fb952752c3d34628a17585a1', 'YOUR_USERID_NOZOE_AKIKO'];\nconst msg = $json.pushMessage;\nif (!msg || !msg.trim()) { return [{ json: { done: true, skipped: true } }]; }\nawait this.helpers.httpRequest({\n  method: 'POST', url: 'https://api.line.me/v2/bot/message/multicast',\n  headers: { 'Authorization': lineToken },\n  body: { to: USERS, messages: [{ type: 'text', text: msg }] }, json: true\n});\nreturn [{ json: { done: true } }];"
+        "jsCode": "const lineToken = 'Bearer hoTr1JKdr9gU2d0t7gqwHL87fIBVv6TopFIMTVzjBncyUIHEjY5jes3+oZH1WmC8tR58LwxKD+s6KaYp6ok+mPxGsCEbxQzeHF1yGfX/BLLhM51R5PIIfy4VtDbGBKHXTHi8ls5KwMf7jEN7dg/LTAdB04t89/1O/w1cDnyilFU=';\nconst USERS = ['Uc1e1e958fb952752c3d34628a17585a1', 'YOUR_USERID_NOZOE_AKIKO'];\nconst msg = $json.pushMessage;\nif (!msg || !msg.trim()) { return [{ json: { done: true, skipped: true } }]; }\nawait this.helpers.httpRequest({\n  method: 'POST', url: 'https://api.line.me/v2/bot/message/multicast',\n  headers: { 'Authorization': lineToken },\n  body: { to: USERS, messages: [{ type: 'text', text: msg }] }, json: true\n});\nreturn [{ json: { done: true } }];"
       },
       "name": "LINE Push（遅延アラート）",
       "type": "n8n-nodes-base.code",
