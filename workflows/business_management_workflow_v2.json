@@ -168,15 +168,7 @@
         "sendBody": true,
         "contentType": "binaryData",
         "inputDataFieldName": "data",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            }
-          ]
-        },
+        "sendHeaders": false,
         "options": {}
       },
       "name": "アップロード",
