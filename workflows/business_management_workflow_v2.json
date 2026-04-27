@@ -162,7 +162,7 @@
     {
       "parameters": {
         "method": "PUT",
-        "url": "=https://graph.microsoft.com/v1.0/me/drive/items/{{ $json.fileId }}/content",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/経費管理/{{ $json.fileName }}:/content",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "microsoftDriveOAuth2Api",
         "sendBody": true,
