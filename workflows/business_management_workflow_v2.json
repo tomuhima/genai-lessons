@@ -482,6 +482,58 @@
         1400
       ],
       "id": "bm-push-alert-001"
+    },
+    {
+      "id": "bm-summary-file-001",
+      "name": "年間サマリーファイル情報取得",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1300,
+        1200
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/経費管理/年次/年間サマリー_' + $('レポート準備').first().json.year + '年.xlsx' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "options": {}
+      }
+    },
+    {
+      "id": "bm-summary-update-001",
+      "name": "年間サマリー更新",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        1200
+      ],
+      "parameters": {
+        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const reportData = $('レポート準備').first().json;\n  const prevYear = reportData.year;\n  const prevMonth = reportData.month;\n  const summaryFileInfo = $('年間サマリーファイル情報取得').first().json;\n  const monthlyFileInfo = $('レポートファイル情報取得').first().json;\n  const monthlyDownloadUrl = monthlyFileInfo['@microsoft.graph.downloadUrl'];\n  if (!monthlyDownloadUrl) throw new Error('月次ファイルが見つかりません');\n  const getVal = (cell) => (cell && typeof cell === 'object' && 'result' in cell) ? cell.result : cell;\n  // 月次ファイルから集計\n  const monthlyRes = await this.helpers.httpRequest({ method: 'GET', url: monthlyDownloadUrl, encoding: 'arraybuffer', returnFullResponse: false });\n  const monthlyWb = new ExcelJS.Workbook();\n  await monthlyWb.xlsx.load(Buffer.from(monthlyRes), { useSharedStrings: false });\n  let salesTotal=0, receivedTotal=0, unreceivedTotal=0;\n  let subTotal=0, subPaidTotal=0, subUnpaidTotal=0, expTotal=0;\n  const salesSheet = monthlyWb.getWorksheet('売上管理');\n  if (salesSheet) salesSheet.eachRow((row, num) => {\n    if (num < 2 || !row.getCell(3).value) return;\n    const total = getVal(row.getCell(7).value) || 0; salesTotal += total;\n    const status = String(getVal(row.getCell(12).value) || '');\n    if (status === '入金済') receivedTotal += getVal(row.getCell(11).value) || 0;\n    else unreceivedTotal += total;\n  });\n  const subSheet = monthlyWb.getWorksheet('外注管理');\n  if (subSheet) subSheet.eachRow((row, num) => {\n    if (num < 2 || !row.getCell(3).value) return;\n    const total = getVal(row.getCell(9).value) || 0; subTotal += total;\n    const status = String(getVal(row.getCell(14).value) || '');\n    if (status === '支払済') subPaidTotal += getVal(row.getCell(13).value) || 0;\n    else subUnpaidTotal += total;\n  });\n  const expSheet = monthlyWb.getWorksheet('経費');\n  if (expSheet) expSheet.eachRow((row, num) => {\n    if (num < 2 || !row.getCell(2).value) return;\n    expTotal += getVal(row.getCell(7).value) || 0;\n  });\n  const laborCost = 0; // 日報システムと連携後に実装\n  const grossProfit = salesTotal - subTotal - expTotal - laborCost;\n  // 年間サマリーを読み込み\n  const summaryWb = new ExcelJS.Workbook();\n  const summaryDownloadUrl = summaryFileInfo['@microsoft.graph.downloadUrl'];\n  if (summaryDownloadUrl) {\n    try {\n      const res = await this.helpers.httpRequest({ method: 'GET', url: summaryDownloadUrl, encoding: 'arraybuffer', returnFullResponse: false });\n      await summaryWb.xlsx.load(Buffer.from(res), { useSharedStrings: false });\n    } catch(e) {}\n  }\n  const sheet = summaryWb.worksheets[0];\n  if (!sheet) throw new Error('年間サマリーシートが見つかりません');\n  // 月のラベルで行を探す（例：「4月」）\n  const monthLabel = `${prevMonth}月`;\n  let targetRowNum = prevMonth + 1; // デフォルト（1月=2行目）\n  sheet.eachRow((row, num) => {\n    if (num < 2) return;\n    const cell = String(row.getCell(1).value || '');\n    if (cell === monthLabel) targetRowNum = num;\n  });\n  const row = sheet.getRow(targetRowNum);\n  row.getCell(1).value = monthLabel;\n  row.getCell(2).value = salesTotal;\n  row.getCell(3).value = receivedTotal;\n  row.getCell(4).value = unreceivedTotal;\n  row.getCell(5).value = subTotal;\n  row.getCell(6).value = subPaidTotal;\n  row.getCell(7).value = subUnpaidTotal;\n  row.getCell(8).value = expTotal;\n  row.getCell(9).value = laborCost;\n  row.getCell(10).value = grossProfit;\n  [2,3,4,5,6,7,8,9,10].forEach(col => { row.getCell(col).numFmt = '#,##0'; });\n  row.commit();\n  const summaryFileName = `年間サマリー_${prevYear}年.xlsx`;\n  const buf = await summaryWb.xlsx.writeBuffer({ useSharedStrings: false });\n  const bin = await this.helpers.prepareBinaryData(Buffer.from(buf), summaryFileName, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');\n  return [{ json: { summaryFileName, summaryFileId: summaryFileInfo.id, year: prevYear }, binary: { data: bin } }];\n})();"
+      }
+    },
+    {
+      "id": "bm-summary-upload-001",
+      "name": "年間サマリーアップロード",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1700,
+        1200
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $json.summaryFileId ? 'https://graph.microsoft.com/v1.0/me/drive/items/' + $json.summaryFileId + '/content' : 'https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/経費管理/年次/年間サマリー_' + $json.year + '年.xlsx:/content' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "sendHeaders": false,
+        "options": {}
+      }
     }
   ],
   "connections": {
@@ -758,6 +810,39 @@
         [
           {
             "node": "LINE Push（遅延アラート）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LINE Push（月次レポート）": {
+      "main": [
+        [
+          {
+            "node": "年間サマリーファイル情報取得",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "年間サマリーファイル情報取得": {
+      "main": [
+        [
+          {
+            "node": "年間サマリー更新",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "年間サマリー更新": {
+      "main": [
+        [
+          {
+            "node": "年間サマリーアップロード",
             "type": "main",
             "index": 0
           }
