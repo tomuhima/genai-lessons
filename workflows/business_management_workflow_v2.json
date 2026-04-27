@@ -162,7 +162,7 @@
     {
       "parameters": {
         "method": "PUT",
-        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/経費管理/{{ $json.fileName }}:/content",
+        "url": "={{ $('月次ファイル情報取得').first().json.id ? 'https://graph.microsoft.com/v1.0/me/drive/items/' + $('月次ファイル情報取得').first().json.id + '/content' : 'https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/経費管理/' + $json.fileName + ':/content' }}",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "microsoftDriveOAuth2Api",
         "sendBody": true,
