@@ -1,0 +1,54 @@
+{
+  "name": "経営管理スケジュール",
+  "nodes": [
+    {
+      "id": "node-schedule",
+      "name": "スケジュール（毎日09:00 JST）",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 0 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-alert",
+      "name": "アラート処理",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const jst = new Date(new Date().getTime() + 9 * 3600000);\n  const year = jst.getFullYear(), month = jst.getMonth() + 1, day = jst.getDate();\n  const lineToken = 'Bearer YOUR_EXPENSE_LINE_TOKEN';\n  const userIds = ['YOUR_USERID_NOZOE_YU', 'YOUR_USERID_NOZOE_AKIKO'];\n  const fmt = n => (n||0).toLocaleString('ja-JP');\n  const getV = c => (c&&typeof c==='object'&&'result'in c)?c.result:c;\n  const dStr = d => { if(!(d instanceof Date))return String(d||''); return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`; };\n  const addM = (y,m,n) => { const d=new Date(Date.UTC(y,m-1+n,1)); return {year:d.getFullYear(),month:d.getMonth()+1}; };\n\n  const sendPush = async (text) => {\n    for (const uid of userIds) {\n      if (uid.startsWith('YOUR_')) continue;\n      await this.helpers.httpRequest({\n        method:'POST', url:'https://api.line.me/v2/bot/message/push',\n        headers:{'Authorization':lineToken},\n        body:{to:uid, messages:[{type:'text',text}]}, json:true\n      });\n    }\n  };\n\n  const creds = await this.getCredentials('microsoftDriveOAuth2Api');\n  const msToken = creds.oauthTokenData?.access_token;\n  if (!msToken) return [{ json:{error:'MS token missing'} }];\n\n  const loadWb = async (path) => {\n    try {\n      const info = await this.helpers.httpRequest({\n        method:'GET', url:`https://graph.microsoft.com/v1.0/me/drive/root:${path}`,\n        headers:{'Authorization':`Bearer ${msToken}`}, json:true\n      });\n      const dl = info['@microsoft.graph.downloadUrl'];\n      if (!dl) return null;\n      const res = await this.helpers.httpRequest({method:'GET',url:dl,encoding:'arraybuffer',returnFullResponse:false});\n      const wb = new ExcelJS.Workbook();\n      await wb.xlsx.load(Buffer.from(res),{useSharedStrings:false});\n      return wb;\n    } catch(e) { return null; }\n  };\n\n  const prev1 = addM(year,month,-1), prev2 = addM(year,month,-2);\n  const basePath = '/業務管理システム/経費管理/月次/';\n  const [curWb, p1Wb, p2Wb] = await Promise.all([\n    loadWb(`${basePath}経営管理_${year}年${month}月.xlsx`),\n    loadWb(`${basePath}経営管理_${prev1.year}年${prev1.month}月.xlsx`),\n    loadWb(`${basePath}経営管理_${prev2.year}年${prev2.month}月.xlsx`)\n  ]);\n\n  const today = new Date(Date.UTC(year,month-1,day));\n  const alerts = [];\n\n  // ===【毎日】入金遅延チェック ===\n  const overdueRecv = [];\n  const seenRecv = new Set();\n  for (const wb of [curWb,p1Wb,p2Wb]) {\n    if (!wb) continue;\n    const ws = wb.getWorksheet('売上管理');\n    if (!ws) continue;\n    ws.eachRow((row,n) => {\n      if(n<2)return;\n      const c=getV(row.getCell(3).value), st=getV(row.getCell(12).value);\n      const due=getV(row.getCell(9).value), amt=Number(getV(row.getCell(7).value))||0;\n      const key=`${c}_${dStr(due)}`;\n      if(c&&st==='未入金'&&due instanceof Date&&due<today&&!seenRecv.has(key)){\n        seenRecv.add(key);\n        const days=Math.floor((today-due)/86400000);\n        overdueRecv.push(`${c}\\n  ¥${fmt(amt)}  期限:${dStr(due)}（${days}日超過）`);\n      }\n    });\n  }\n  if (overdueRecv.length) alerts.push(`⚠ 入金遅延があります\\n\\n${overdueRecv.join('\\n\\n')}\\n\\n計${overdueRecv.length}件`);\n\n  // ===【毎日】振込遅延チェック ===\n  const overduePaym = [];\n  const seenPaym = new Set();\n  for (const wb of [curWb,p1Wb,p2Wb]) {\n    if (!wb) continue;\n    const ws = wb.getWorksheet('外注管理');\n    if (!ws) continue;\n    ws.eachRow((row,n) => {\n      if(n<2)return;\n      const v=getV(row.getCell(3).value), st=getV(row.getCell(14).value);\n      const due=getV(row.getCell(11).value), amt=Number(getV(row.getCell(9).value))||0;\n      const key=`${v}_${dStr(due)}`;\n      if(v&&st==='未払'&&due instanceof Date&&due<today&&!seenPaym.has(key)){\n        seenPaym.add(key);\n        const days=Math.floor((today-due)/86400000);\n        overduePaym.push(`${v}\\n  ¥${fmt(amt)}  期限:${dStr(due)}（${days}日超過）`);\n      }\n    });\n  }\n  if (overduePaym.length) alerts.push(`⚠ 振込遅延があります\\n\\n${overduePaym.join('\\n\\n')}\\n\\n計${overduePaym.length}件`);\n\n  // ===【毎月3日】売上未入金確認（前月分）===\n  if (day === 3) {\n    const ws = p1Wb && p1Wb.getWorksheet('売上管理');\n    const list = [];\n    if (ws) ws.eachRow((row,n) => {\n      if(n<2)return;\n      const c=getV(row.getCell(3).value), st=getV(row.getCell(12).value);\n      const amt=Number(getV(row.getCell(7).value))||0, due=getV(row.getCell(9).value);\n      if(c&&st==='未入金') list.push(`${c}\\n  ¥${fmt(amt)}  期限:${dStr(due)}`);\n    });\n    alerts.push(list.length\n      ? `【売上未入金確認】\\n前月分（${prev1.year}年${prev1.month}月）\\n\\n${list.join('\\n\\n')}\\n\\n計${list.length}件`\n      : `【売上未入金確認】\\n前月分の未入金はありません ✅`);\n  }\n\n  // ===【毎月8日】給与・秀電工支払リマインダー ===\n  if (day === 8) {\n    alerts.push(`【支払リマインダー】\\n\\n明後日（10日）が支払日です\\n\\n■ 従業員給与\\n  丸田翔吾・源地健史\\n\\n■ 秀電工（服部秀一）\\n  外注管理の未払いを確認してください\\n\\n支払期限が近い外注の確認もお願いします。`);\n  }\n\n  // ===【毎月11日】外注請求書未着チェック（翌月末払い業者）===\n  if (day === 11) {\n    const SUBCONS = ['井本貴史','梶原通信','LLS電気','株式会社トラストテクノス','株式会社RISE'];\n    const katsuWb = await loadWb(`/業務管理システム/日報/稼働表_${prev1.year}年${prev1.month}月.xlsx`);\n    const activeVendors = [];\n    if (katsuWb) {\n      for (const v of SUBCONS) {\n        const ws = katsuWb.getWorksheet(v);\n        let active = false;\n        if (ws) ws.eachRow((r,n) => { if(n>=2&&getV(r.getCell(1).value))active=true; });\n        if (active) activeVendors.push(v);\n      }\n    }\n    const thisMonthEnd = new Date(Date.UTC(year,month,0));\n    const missing = [];\n    for (const v of activeVendors) {\n      let found = false;\n      for (const wb of [curWb,p1Wb]) {\n        if (!wb||found) continue;\n        const ws = wb.getWorksheet('外注管理');\n        if (!ws) continue;\n        ws.eachRow((row,n) => {\n          if(n<2||found)return;\n          const vn=getV(row.getCell(3).value), due=getV(row.getCell(11).value);\n          if(vn===v&&due instanceof Date&&due.getFullYear()===thisMonthEnd.getFullYear()&&due.getMonth()===thisMonthEnd.getMonth()) found=true;\n        });\n      }\n      if (!found) missing.push(v);\n    }\n    if (missing.length) alerts.push(`【外注請求書未着】\\n以下の業者から今月の請求書が届いていません\\n\\n${missing.map(v=>`⚠ ${v}`).join('\\n')}\\n\\n支払期限：${year}年${month}月末`);\n  }\n\n  // ===【毎月15日】オークコミュニケーション未入金確認 ===\n  if (day === 15) {\n    const oakList = [];\n    const seenOak = new Set();\n    for (const wb of [curWb,p1Wb,p2Wb]) {\n      if (!wb) continue;\n      const ws = wb.getWorksheet('売上管理');\n      if (!ws) continue;\n      ws.eachRow((row,n) => {\n        if(n<2)return;\n        const c=getV(row.getCell(3).value), st=getV(row.getCell(12).value);\n        const amt=Number(getV(row.getCell(7).value))||0, due=getV(row.getCell(9).value);\n        const key=`${dStr(due)}_${amt}`;\n        if(c==='オークコミュニケーション'&&st==='未入金'&&!seenOak.has(key)){\n          seenOak.add(key); oakList.push(`¥${fmt(amt)}  期限:${dStr(due)}`);\n        }\n      });\n    }\n    alerts.push(oakList.length\n      ? `【オークコミュニケーション 未入金確認】\\n\\n${oakList.join('\\n')}`\n      : `【オークコミュニケーション 未入金確認】\\n✅ 未入金はありません`);\n  }\n\n  // ===【毎月21日】秀電工請求書未着チェック ===\n  if (day === 21) {\n    const katsuWb = await loadWb(`/業務管理システム/日報/稼働表_${prev1.year}年${prev1.month}月.xlsx`);\n    let hideoActive = false;\n    if (katsuWb) {\n      const ws = katsuWb.getWorksheet('服部秀一');\n      if (ws) ws.eachRow((r,n) => { if(n>=2&&getV(r.getCell(1).value))hideoActive=true; });\n    }\n    if (hideoActive) {\n      const payM = addM(prev1.year,prev1.month,2);\n      const expDue = new Date(Date.UTC(payM.year,payM.month-1,10));\n      let found = false;\n      for (const wb of [curWb,p1Wb]) {\n        if (!wb||found) continue;\n        const ws = wb.getWorksheet('外注管理');\n        if (!ws) continue;\n        ws.eachRow((row,n) => {\n          if(n<2||found)return;\n          const v=getV(row.getCell(3).value), due=getV(row.getCell(11).value);\n          if(v==='秀電工'&&due instanceof Date&&due.getFullYear()===expDue.getFullYear()&&due.getMonth()===expDue.getMonth()&&due.getDate()===10) found=true;\n        });\n      }\n      if (!found) alerts.push(`【秀電工 請求書未着】\\n秀電工（服部秀一）の請求書がまだ届いていません\\n\\n支払期限：${payM.year}年${payM.month}月10日`);\n    }\n  }\n\n  // ===【毎月25日】外注未払い確認 ===\n  if (day === 25) {\n    const unpaid = [];\n    const seenUp = new Set();\n    for (const wb of [curWb,p1Wb]) {\n      if (!wb) continue;\n      const ws = wb.getWorksheet('外注管理');\n      if (!ws) continue;\n      ws.eachRow((row,n) => {\n        if(n<2)return;\n        const v=getV(row.getCell(3).value), st=getV(row.getCell(14).value);\n        const amt=Number(getV(row.getCell(9).value))||0, due=getV(row.getCell(11).value);\n        const key=`${v}_${dStr(due)}`;\n        if(v&&st==='未払'&&!seenUp.has(key)){ seenUp.add(key); unpaid.push(`${v}\\n  ¥${fmt(amt)}  期限:${dStr(due)}`); }\n      });\n    }\n    alerts.push(unpaid.length\n      ? `【外注未払い確認】\\n来月の支払いに向けて確認してください\\n\\n${unpaid.join('\\n\\n')}\\n\\n計${unpaid.length}件`\n      : `【外注未払い確認】\\n✅ 未払いはありません`);\n  }\n\n  for (const alert of alerts) { await sendPush(alert); }\n  return [{ json:{ date:`${year}/${month}/${day}`, alertCount:alerts.length } }];\n})();"
+      }
+    }
+  ],
+  "connections": {
+    "スケジュール（毎日09:00 JST）": {
+      "main": [
+        [
+          {
+            "node": "アラート処理",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
