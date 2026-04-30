@@ -161,7 +161,7 @@
         "conditions": {
           "boolean": [
             {
-              "value1": "={{ $json.valid }}",
+              "value1": "={{ $('Excel書き込み＋アップロード').first().json.valid }}",
               "value2": true
             }
           ]
