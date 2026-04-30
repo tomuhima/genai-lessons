@@ -99,7 +99,7 @@
         "method": "GET",
         "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/経費管理/月次/{{ $json.fileName }}",
         "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "nodeCredentialType": "microsoftOneDriveOAuth2Api",
         "options": {}
       },
       "name": "月次ファイル情報取得",
@@ -117,7 +117,7 @@
         "method": "GET",
         "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/経費管理/月次/{{ $json.fileName }}",
         "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "nodeCredentialType": "microsoftOneDriveOAuth2Api",
         "options": {}
       },
       "name": "月次ファイル情報取得（照会）",
@@ -236,7 +236,7 @@
         "method": "GET",
         "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/経費管理/年次/年間サマリー_{{ $json.targetYear }}年.xlsx",
         "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "nodeCredentialType": "microsoftOneDriveOAuth2Api",
         "options": {}
       },
       "name": "年次ファイル情報取得",
@@ -267,7 +267,7 @@
         "method": "PUT",
         "url": "={{ $json.uploadUrl }}",
         "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "nodeCredentialType": "microsoftOneDriveOAuth2Api",
         "sendBody": true,
         "contentType": "binaryData",
         "inputDataFieldName": "data",
@@ -281,7 +281,13 @@
         500
       ],
       "id": "bm-v3-upload",
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "microsoftOneDriveOAuth2Api": {
+          "id": "moefF1khBbiylrGo",
+          "name": "Microsoft Drive account"
+        }
+      }
     },
     {
       "id": "excelcheck001",
@@ -334,11 +340,17 @@
         "method": "PUT",
         "url": "={{ $json.yearlyUploadUrl }}",
         "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "nodeCredentialType": "microsoftOneDriveOAuth2Api",
         "sendBody": true,
         "contentType": "binaryData",
         "inputDataFieldName": "data",
         "options": {}
+      },
+      "credentials": {
+        "microsoftOneDriveOAuth2Api": {
+          "id": "moefF1khBbiylrGo",
+          "name": "Microsoft Drive account"
+        }
       }
     }
   ],
