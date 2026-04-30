@@ -207,7 +207,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const lineToken = 'Bearer YOUR_EXPENSE_LINE_TOKEN';\nif ($json.done) return [{ json: { done: true } }];\nconst replyToken = $json.replyToken;\nconst text = $json.replyMessage || 'お疲れ様です';\nif (replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST', url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken },\n    body: { replyToken, messages: [{ type: 'text', text }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];"
+        "jsCode": "const lineToken = 'Bearer hoTr1JKdr9gU2d0t7gqwHL87fIBVv6TopFIMTVzjBncyUIHEjY5jes3+oZH1WmC8tR58LwxKD+s6KaYp6ok+mPxGsCEbxQzeHF1yGfX/BLLhM51R5PIIfy4VtDbGBKHXTHi8ls5KwMf7jEN7dg/LTAdB04t89/1O/w1cDnyilFU=';\nif ($json.done) return [{ json: { done: true } }];\nconst replyToken = $json.replyToken;\nconst text = $json.replyMessage || 'お疲れ様です';\nif (replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST', url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken },\n    body: { replyToken, messages: [{ type: 'text', text }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];"
       },
       "name": "LINE返信（照会）",
       "type": "n8n-nodes-base.code",
