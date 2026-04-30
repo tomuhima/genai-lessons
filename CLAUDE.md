@@ -49,7 +49,7 @@ with open('path/to/file.json', 'w', encoding='utf-8') as f:
 ## 日報システム（daily_report_workflow）
 
 - ファイルパス：`/home/user/genai-lessons/workflows/daily_report_workflow_v2.json`
-- Webhook URL：`https://n8n-light-mn.xvps.jp/webhook/daily-report`
+- Webhook URL：`https://n8n-light-m-n.xvps.jp/webhook/daily-report`
 - OneDriveパス：`/日報/稼働表_YYYY年MM月.xlsx`
 - 請求集計パス：`/請求集計/請求集計_YYYY年MM月.xlsx`
 
