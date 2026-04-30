@@ -110,7 +110,13 @@
         500
       ],
       "id": "bm-v3-fileinfo-w",
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "microsoftOneDriveOAuth2Api": {
+          "id": "moefF1khBbiylrGo",
+          "name": "Microsoft Drive account"
+        }
+      }
     },
     {
       "parameters": {
@@ -128,7 +134,13 @@
         220
       ],
       "id": "bm-v3-fileinfo-q",
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "microsoftOneDriveOAuth2Api": {
+          "id": "moefF1khBbiylrGo",
+          "name": "Microsoft Drive account"
+        }
+      }
     },
     {
       "parameters": {
@@ -247,7 +259,13 @@
         500
       ],
       "id": "bm-v3-yearly-info",
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "microsoftOneDriveOAuth2Api": {
+          "id": "moefF1khBbiylrGo",
+          "name": "Microsoft Drive account"
+        }
+      }
     },
     {
       "parameters": {
