@@ -161,7 +161,7 @@
         "conditions": {
           "boolean": [
             {
-              "value1": "={{ $('Excel書き込み＋アップロード').first().json.valid }}",
+              "value1": "={{ $json.valid }}",
               "value2": true
             }
           ]
@@ -174,14 +174,14 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        1320,
+        1680,
         500
       ],
       "id": "bm-v3-writecheck"
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst mt = data.messageType;\nconst fmt = n => (n||0).toLocaleString('ja-JP');\nconst msgs = {\n  expense: `✅ 経費を記録しました\\n\\n日付: ${data.date}\\n種類: ${data.expenseCategory}${data.requiresReview?' ⚠要確認':''}\\n支払方法: ${data.paymentMethod}\\n店名: ${data.storeName}\\n金額: ¥${fmt(data.amount)}${data.note?'\\n備考: '+data.note:''}`,\n  multi_expense: `✅ ${data.entryCount}件の経費を記録しました\\n\\n${data.imageType==='bank_statement'?'📋 通帳・引き落とし明細':'💳 クレジットカード明細'}\\n合計: ¥${fmt(data.totalAmount)}${data.hasReview?'\\n\\n⚠ 要確認の項目が含まれています\\n税理士に確認してください':''}`,\n  subcontractor_invoice: `✅ 外注請求を記録しました\\n\\n業者: ${data.vendorName}\\n案件: ${data.projectName||'未設定'}\\n請求額(税抜): ¥${fmt(data.amountExTax)}\\n消費税: ¥${fmt(data.tax)}\\n合計: ¥${fmt(data.totalAmount)}${data.calculatedDue?'\\n支払期限: '+data.calculatedDue:''}\\n状況: 未払`,\n  subcontractor_payment: `✅ 外注支払を記録しました\\n\\n業者: ${data.vendorName}\\n支払日: ${data.paymentDate}\\n支払額: ¥${fmt(data.paymentAmount)}\\n状況: 支払済に更新`,\n  sales: `✅ 売上を記録しました\\n\\n得意先: ${data.clientName}\\n案件: ${data.projectName||'未設定'}\\n請求額(税抜): ¥${fmt(data.amountExTax)}\\n消費税: ¥${fmt(data.tax)}\\n合計: ¥${fmt(data.totalAmount)}\\n請求日: ${data.invoiceDate}${data.calculatedDue?'\\n入金期限: '+data.calculatedDue:data.paymentDueDate?'\\n入金期限: '+data.paymentDueDate:''}\\n状況: 未入金`,\n  payslip: `✅ 給与明細を記録しました\\n\\n従業員: ${data.employeeName}\\n支払日: ${data.paymentDate}\\n基本給: ¥${fmt(data.baseSalary)}\\n支給合計: ¥${fmt(data.grossPay)}\\n控除合計: ¥${fmt(data.totalDeductions)}\\n差引支給額: ¥${fmt(data.netPay)}`,\n  payment_received: `✅ 入金を記録しました\\n\\n得意先: ${data.clientName}\\n入金日: ${data.receivedDate}\\n入金額: ¥${fmt(data.receivedAmount)}\\n状況: 入金済に更新`,\n};\nconst replyMessage = msgs[mt] || '✅ 記録しました';\nreturn [{ json: { replyToken: data.replyToken, replyMessage } }];"
+        "jsCode": "const data = $('LINEメッセージ解析').first().json;\nconst mt = data.messageType;\nconst fmt = n => (n||0).toLocaleString('ja-JP');\nconst msgs = {\n  expense: `✅ 経費を記録しました\\n\\n日付: ${data.date}\\n種類: ${data.expenseCategory}${data.requiresReview?' ⚠要確認':''}\\n支払方法: ${data.paymentMethod}\\n店名: ${data.storeName}\\n金額: ¥${fmt(data.amount)}${data.note?'\\n備考: '+data.note:''}`,\n  multi_expense: `✅ ${data.entryCount}件の経費を記録しました\\n\\n${data.imageType==='bank_statement'?'📋 通帳・引き落とし明細':'💳 クレジットカード明細'}\\n合計: ¥${fmt(data.totalAmount)}${data.hasReview?'\\n\\n⚠ 要確認の項目が含まれています\\n税理士に確認してください':''}`,\n  subcontractor_invoice: `✅ 外注請求を記録しました\\n\\n業者: ${data.vendorName}\\n案件: ${data.projectName||'未設定'}\\n請求額(税抜): ¥${fmt(data.amountExTax)}\\n消費税: ¥${fmt(data.tax)}\\n合計: ¥${fmt(data.totalAmount)}${data.calculatedDue?'\\n支払期限: '+data.calculatedDue:''}\\n状況: 未払`,\n  subcontractor_payment: `✅ 外注支払を記録しました\\n\\n業者: ${data.vendorName}\\n支払日: ${data.paymentDate}\\n支払額: ¥${fmt(data.paymentAmount)}\\n状況: 支払済に更新`,\n  sales: `✅ 売上を記録しました\\n\\n得意先: ${data.clientName}\\n案件: ${data.projectName||'未設定'}\\n請求額(税抜): ¥${fmt(data.amountExTax)}\\n消費税: ¥${fmt(data.tax)}\\n合計: ¥${fmt(data.totalAmount)}\\n請求日: ${data.invoiceDate}${data.calculatedDue?'\\n入金期限: '+data.calculatedDue:data.paymentDueDate?'\\n入金期限: '+data.paymentDueDate:''}\\n状況: 未入金`,\n  payslip: `✅ 給与明細を記録しました\\n\\n従業員: ${data.employeeName}\\n支払日: ${data.paymentDate}\\n基本給: ¥${fmt(data.baseSalary)}\\n支給合計: ¥${fmt(data.grossPay)}\\n控除合計: ¥${fmt(data.totalDeductions)}\\n差引支給額: ¥${fmt(data.netPay)}`,\n  payment_received: `✅ 入金を記録しました\\n\\n得意先: ${data.clientName}\\n入金日: ${data.receivedDate}\\n入金額: ¥${fmt(data.receivedAmount)}\\n状況: 入金済に更新`,\n};\nconst replyMessage = msgs[mt] || '✅ 記録しました';\nreturn [{ json: { replyToken: data.replyToken, replyMessage } }];"
       },
       "name": "成功メッセージ生成",
       "type": "n8n-nodes-base.code",
@@ -251,7 +251,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst ExcelJS = require('exceljs');\nreturn await (async () => {\n  const data = $('LINEメッセージ解析').first().json;\n  const monthlyWb = new ExcelJS.Workbook();\n  const monthlyFile = $('月次ファイル情報取得').first().json;\n  const yearlyFile = $('年次ファイル情報取得').first().json;\n  try {\n    // 月次ファイルを読み込み\n    const dlUrl = monthlyFile['@microsoft.graph.downloadUrl'];\n    if (!dlUrl) return [{ json: { yearlyDone: false } }];\n    const mRes = await this.helpers.httpRequest({ method:'GET', url:dlUrl, encoding:'arraybuffer', returnFullResponse:false });\n    await monthlyWb.xlsx.load(Buffer.from(mRes), { useSharedStrings: false });\n    const getV = c => (c&&typeof c==='object'&&'result'in c)?c.result:c;\n\n    // 月次データ集計\n    const expS=monthlyWb.getWorksheet('経費'), subS=monthlyWb.getWorksheet('外注管理'), salS=monthlyWb.getWorksheet('売上管理');\n    const expCats=['旅費交通費','通信費','水道光熱費','荷造運賃','外注費','広告宣伝費','支払手数料','保険料','租税公課','リース料','支払利息','消耗品費','法定福利費','諸会費','新聞図書費','会議費','接待交際費','地代家賃','車両運搬具','福利厚生費','給与','減価償却費','雑費'];\n    const byCat={};\n    if(expS)expS.eachRow((r,n)=>{ if(n<2)return; const c=getV(r.getCell(3).value); const a=getV(r.getCell(7).value)||0; if(c)byCat[c]=(byCat[c]||0)+a; });\n    const expTotal=Object.values(byCat).reduce((a,b)=>a+b,0);\n\n    let salTotal=0,recvTotal=0;\n    const byClient={};\n    if(salS)salS.eachRow((r,n)=>{ if(n<2)return; const t=getV(r.getCell(7).value)||0; const st=getV(r.getCell(12).value); const cl=getV(r.getCell(3).value)||''; salTotal+=t; byClient[cl]=(byClient[cl]||0)+t; if(st==='入金済')recvTotal+=(getV(r.getCell(11).value)||t); });\n\n    let subTotal=0,subPaid=0;\n    const byVendor={};\n    if(subS)subS.eachRow((r,n)=>{ if(n<2)return; const t=getV(r.getCell(9).value)||0; const st=getV(r.getCell(14).value); const vn=getV(r.getCell(3).value)||''; subTotal+=t; byVendor[vn]=(byVendor[vn]||0)+t; if(st==='支払済')subPaid+=(getV(r.getCell(13).value)||t); });\n\n    const grossProfit=salTotal-subTotal-expTotal;\n    const month=data.targetMonth; // 1-12\n    const dataCol=month+1; // 月別シートは B列=1月, C列=2月...\n    const monthLabel=`${month}月`;\n\n    // 年次ファイル読み込み or 新規作成\n    const yearlyWb = new ExcelJS.Workbook();\n    const yDlUrl = yearlyFile['@microsoft.graph.downloadUrl'];\n    if(yDlUrl){\n      try{\n        const yRes=await this.helpers.httpRequest({ method:'GET', url:yDlUrl, encoding:'arraybuffer', returnFullResponse:false });\n        await yearlyWb.xlsx.load(Buffer.from(yRes),{useSharedStrings:false});\n      }catch(e){}\n    }\n\n    // ① 月別収支シート更新\n    let mbSheet=yearlyWb.getWorksheet('月別収支');\n    if(!mbSheet){\n      mbSheet=yearlyWb.addWorksheet('月別収支');\n      const h=mbSheet.getRow(1);\n      ['月','売上請求','入金済','未入金','外注費','外注支払','未払','経費','人件費','粗利（概算）'].forEach((v,i)=>h.getCell(i+1).value=v);\n      h.font={bold:true}; h.commit();\n      ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'].forEach((ml,i)=>{\n        const r=mbSheet.getRow(i+2); r.getCell(1).value=ml; r.commit();\n      });\n    }\n    mbSheet.eachRow((row,n)=>{ if(n<2)return; if(getV(row.getCell(1).value)===monthLabel){\n      row.getCell(2).value=salTotal; row.getCell(3).value=recvTotal; row.getCell(4).value=salTotal-recvTotal;\n      row.getCell(5).value=subTotal; row.getCell(6).value=subPaid; row.getCell(7).value=subTotal-subPaid;\n      row.getCell(8).value=expTotal; row.getCell(10).value=grossProfit;\n      [2,3,4,5,6,7,8,9,10].forEach(c=>{row.getCell(c).numFmt='#,##0';});\n      row.commit();\n    }});\n\n    // ② 業者別外注費シート更新\n    let vSheet=yearlyWb.getWorksheet('業者別外注費');\n    if(!vSheet){\n      vSheet=yearlyWb.addWorksheet('業者別外注費');\n      const h=vSheet.getRow(1);\n      ['業者名','1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月','合計'].forEach((v,i)=>h.getCell(i+1).value=v);\n      h.font={bold:true}; h.commit();\n    }\n    Object.entries(byVendor).forEach(([vendor,amt])=>{\n      let found=false;\n      vSheet.eachRow((row,n)=>{ if(n<2||found)return; if(getV(row.getCell(1).value)===vendor){\n        row.getCell(dataCol).value=amt; row.getCell(dataCol).numFmt='#,##0'; row.commit(); found=true;\n      }});\n      if(!found){\n        const nr=vSheet.lastRow?vSheet.lastRow.number+1:2;\n        const row=vSheet.getRow(nr); row.getCell(1).value=vendor; row.getCell(dataCol).value=amt; row.getCell(dataCol).numFmt='#,##0'; row.commit();\n      }\n    });\n\n    // ③ 得意先別売上シート更新\n    let cSheet=yearlyWb.getWorksheet('得意先別売上');\n    if(!cSheet){\n      cSheet=yearlyWb.addWorksheet('得意先別売上');\n      const h=cSheet.getRow(1);\n      ['得意先名','1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月','合計'].forEach((v,i)=>h.getCell(i+1).value=v);\n      h.font={bold:true}; h.commit();\n    }\n    Object.entries(byClient).forEach(([client,amt])=>{\n      let found=false;\n      cSheet.eachRow((row,n)=>{ if(n<2||found)return; if(getV(row.getCell(1).value)===client){\n        row.getCell(dataCol).value=amt; row.getCell(dataCol).numFmt='#,##0'; row.commit(); found=true;\n      }});\n      if(!found){\n        const nr=cSheet.lastRow?cSheet.lastRow.number+1:2;\n        const row=cSheet.getRow(nr); row.getCell(1).value=client; row.getCell(dataCol).value=amt; row.getCell(dataCol).numFmt='#,##0'; row.commit();\n      }\n    });\n\n    // ④ 経費種類別シート更新\n    let eSheet=yearlyWb.getWorksheet('経費種類別');\n    if(!eSheet){\n      eSheet=yearlyWb.addWorksheet('経費種類別');\n      const h=eSheet.getRow(1);\n      ['経費種類','1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月','合計'].forEach((v,i)=>h.getCell(i+1).value=v);\n      h.font={bold:true}; h.commit();\n      expCats.forEach((cat,i)=>{ const r=eSheet.getRow(i+2); r.getCell(1).value=cat; r.commit(); });\n    }\n    expCats.forEach(cat=>{\n      eSheet.eachRow((row,n)=>{ if(n<2)return; if(getV(row.getCell(1).value)===cat){\n        row.getCell(dataCol).value=byCat[cat]||0; row.getCell(dataCol).numFmt='#,##0'; row.commit();\n      }});\n    });\n\n    // 年次ファイルをアップロード\n    const creds=await this.getCredentials('microsoftDriveOAuth2Api');\n    const token=creds.oauthTokenData?.access_token;\n    if(!token) return [{ json: { yearlyDone:false, reason:'token error' } }];\n    const buf=await yearlyWb.xlsx.writeBuffer({useSharedStrings:false});\n    const upUrl=yearlyFile.id\n      ?`https://graph.microsoft.com/v1.0/me/drive/items/${yearlyFile.id}/content`\n      :`https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/経費管理/年次/年間サマリー_${data.targetYear}年.xlsx:/content`;\n    await this.helpers.httpRequest({\n      method:'PUT', url:upUrl,\n      headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'},\n      body:Buffer.from(buf), returnFullResponse:false\n    });\n    return [{ json: { yearlyDone:true } }];\n  } catch(e) {\n    return [{ json: { yearlyDone:false, reason:e.message } }];\n  }\n})();\n"
+        "jsCode": "\nconst ExcelJS = require('exceljs');\nreturn await (async () => {\n  const data = $('LINEメッセージ解析').first().json;\n  const monthlyWb = new ExcelJS.Workbook();\n  const monthlyFile = $('月次ファイル情報取得').first().json;\n  const yearlyFile = $('年次ファイル情報取得').first().json;\n  try {\n    // 月次ファイルを読み込み\n    const dlUrl = monthlyFile['@microsoft.graph.downloadUrl'];\n    if (!dlUrl) return [{ json: { yearlyDone: false } }];\n    const mRes = await this.helpers.httpRequest({ method:'GET', url:dlUrl, encoding:'arraybuffer', returnFullResponse:false });\n    await monthlyWb.xlsx.load(Buffer.from(mRes), { useSharedStrings: false });\n    const getV = c => (c&&typeof c==='object'&&'result'in c)?c.result:c;\n\n    // 月次データ集計\n    const expS=monthlyWb.getWorksheet('経費'), subS=monthlyWb.getWorksheet('外注管理'), salS=monthlyWb.getWorksheet('売上管理');\n    const expCats=['旅費交通費','通信費','水道光熱費','荷造運賃','外注費','広告宣伝費','支払手数料','保険料','租税公課','リース料','支払利息','消耗品費','法定福利費','諸会費','新聞図書費','会議費','接待交際費','地代家賃','車両運搬具','福利厚生費','給与','減価償却費','雑費'];\n    const byCat={};\n    if(expS)expS.eachRow((r,n)=>{ if(n<2)return; const c=getV(r.getCell(3).value); const a=getV(r.getCell(7).value)||0; if(c)byCat[c]=(byCat[c]||0)+a; });\n    const expTotal=Object.values(byCat).reduce((a,b)=>a+b,0);\n\n    let salTotal=0,recvTotal=0;\n    const byClient={};\n    if(salS)salS.eachRow((r,n)=>{ if(n<2)return; const t=getV(r.getCell(7).value)||0; const st=getV(r.getCell(12).value); const cl=getV(r.getCell(3).value)||''; salTotal+=t; byClient[cl]=(byClient[cl]||0)+t; if(st==='入金済')recvTotal+=(getV(r.getCell(11).value)||t); });\n\n    let subTotal=0,subPaid=0;\n    const byVendor={};\n    if(subS)subS.eachRow((r,n)=>{ if(n<2)return; const t=getV(r.getCell(9).value)||0; const st=getV(r.getCell(14).value); const vn=getV(r.getCell(3).value)||''; subTotal+=t; byVendor[vn]=(byVendor[vn]||0)+t; if(st==='支払済')subPaid+=(getV(r.getCell(13).value)||t); });\n\n    const grossProfit=salTotal-subTotal-expTotal;\n    const month=data.targetMonth; // 1-12\n    const dataCol=month+1; // 月別シートは B列=1月, C列=2月...\n    const monthLabel=`${month}月`;\n\n    // 年次ファイル読み込み or 新規作成\n    const yearlyWb = new ExcelJS.Workbook();\n    const yDlUrl = yearlyFile['@microsoft.graph.downloadUrl'];\n    if(yDlUrl){\n      try{\n        const yRes=await this.helpers.httpRequest({ method:'GET', url:yDlUrl, encoding:'arraybuffer', returnFullResponse:false });\n        await yearlyWb.xlsx.load(Buffer.from(yRes),{useSharedStrings:false});\n      }catch(e){}\n    }\n\n    // ① 月別収支シート更新\n    let mbSheet=yearlyWb.getWorksheet('月別収支');\n    if(!mbSheet){\n      mbSheet=yearlyWb.addWorksheet('月別収支');\n      const h=mbSheet.getRow(1);\n      ['月','売上請求','入金済','未入金','外注費','外注支払','未払','経費','人件費','粗利（概算）'].forEach((v,i)=>h.getCell(i+1).value=v);\n      h.font={bold:true}; h.commit();\n      ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'].forEach((ml,i)=>{\n        const r=mbSheet.getRow(i+2); r.getCell(1).value=ml; r.commit();\n      });\n    }\n    mbSheet.eachRow((row,n)=>{ if(n<2)return; if(getV(row.getCell(1).value)===monthLabel){\n      row.getCell(2).value=salTotal; row.getCell(3).value=recvTotal; row.getCell(4).value=salTotal-recvTotal;\n      row.getCell(5).value=subTotal; row.getCell(6).value=subPaid; row.getCell(7).value=subTotal-subPaid;\n      row.getCell(8).value=expTotal; row.getCell(10).value=grossProfit;\n      [2,3,4,5,6,7,8,9,10].forEach(c=>{row.getCell(c).numFmt='#,##0';});\n      row.commit();\n    }});\n\n    // ② 業者別外注費シート更新\n    let vSheet=yearlyWb.getWorksheet('業者別外注費');\n    if(!vSheet){\n      vSheet=yearlyWb.addWorksheet('業者別外注費');\n      const h=vSheet.getRow(1);\n      ['業者名','1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月','合計'].forEach((v,i)=>h.getCell(i+1).value=v);\n      h.font={bold:true}; h.commit();\n    }\n    Object.entries(byVendor).forEach(([vendor,amt])=>{\n      let found=false;\n      vSheet.eachRow((row,n)=>{ if(n<2||found)return; if(getV(row.getCell(1).value)===vendor){\n        row.getCell(dataCol).value=amt; row.getCell(dataCol).numFmt='#,##0'; row.commit(); found=true;\n      }});\n      if(!found){\n        const nr=vSheet.lastRow?vSheet.lastRow.number+1:2;\n        const row=vSheet.getRow(nr); row.getCell(1).value=vendor; row.getCell(dataCol).value=amt; row.getCell(dataCol).numFmt='#,##0'; row.commit();\n      }\n    });\n\n    // ③ 得意先別売上シート更新\n    let cSheet=yearlyWb.getWorksheet('得意先別売上');\n    if(!cSheet){\n      cSheet=yearlyWb.addWorksheet('得意先別売上');\n      const h=cSheet.getRow(1);\n      ['得意先名','1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月','合計'].forEach((v,i)=>h.getCell(i+1).value=v);\n      h.font={bold:true}; h.commit();\n    }\n    Object.entries(byClient).forEach(([client,amt])=>{\n      let found=false;\n      cSheet.eachRow((row,n)=>{ if(n<2||found)return; if(getV(row.getCell(1).value)===client){\n        row.getCell(dataCol).value=amt; row.getCell(dataCol).numFmt='#,##0'; row.commit(); found=true;\n      }});\n      if(!found){\n        const nr=cSheet.lastRow?cSheet.lastRow.number+1:2;\n        const row=cSheet.getRow(nr); row.getCell(1).value=client; row.getCell(dataCol).value=amt; row.getCell(dataCol).numFmt='#,##0'; row.commit();\n      }\n    });\n\n    // ④ 経費種類別シート更新\n    let eSheet=yearlyWb.getWorksheet('経費種類別');\n    if(!eSheet){\n      eSheet=yearlyWb.addWorksheet('経費種類別');\n      const h=eSheet.getRow(1);\n      ['経費種類','1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月','合計'].forEach((v,i)=>h.getCell(i+1).value=v);\n      h.font={bold:true}; h.commit();\n      expCats.forEach((cat,i)=>{ const r=eSheet.getRow(i+2); r.getCell(1).value=cat; r.commit(); });\n    }\n    expCats.forEach(cat=>{\n      eSheet.eachRow((row,n)=>{ if(n<2)return; if(getV(row.getCell(1).value)===cat){\n        row.getCell(dataCol).value=byCat[cat]||0; row.getCell(dataCol).numFmt='#,##0'; row.commit();\n      }});\n    });\n\n    // 年次ファイルをバイナリ出力（アップロードは次のHTTP Requestノードで実施）\n    const buf=await yearlyWb.xlsx.writeBuffer({useSharedStrings:false});\n    const yearlyUploadUrl=yearlyFile.id\n      ?`https://graph.microsoft.com/v1.0/me/drive/items/${yearlyFile.id}/content`\n      :`https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/経費管理/年次/年間サマリー_${data.targetYear}年.xlsx:/content`;\n    const yearlyFileName=`年間サマリー_${data.targetYear}年.xlsx`;\n    const bin=await this.helpers.prepareBinaryData(\n      Buffer.from(buf), yearlyFileName,\n      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'\n    );\n    return [{ json: { ...data, valid:true, yearlyUploadUrl, yearlyDone:true }, binary: { data: bin } }];\n  } catch(e) {\n    return [{ json: { ...data, valid:false, yearlyDone:false, reason:e.message } }];\n  }\n})();\n"
       },
       "name": "年次サマリー更新＋アップロード",
       "type": "n8n-nodes-base.code",
@@ -282,6 +282,64 @@
       ],
       "id": "bm-v3-upload",
       "onError": "continueRegularOutput"
+    },
+    {
+      "id": "excelcheck001",
+      "name": "Excelチェック",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1220,
+        500
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.valid }}",
+              "value2": true
+            }
+          ]
+        },
+        "options": {
+          "typeValidation": "loose"
+        }
+      }
+    },
+    {
+      "id": "postupload001",
+      "name": "アップロード後処理",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        420
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const e = $('Excel書き込み＋アップロード').first().json;\nreturn [{ json: { ...e, valid: true } }];"
+      }
+    },
+    {
+      "id": "yearlyupload001",
+      "name": "年次OneDriveアップロード",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1880,
+        500
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $json.yearlyUploadUrl }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      }
     }
   ],
   "connections": {
@@ -374,7 +432,7 @@
       "main": [
         [
           {
-            "node": "OneDriveアップロード",
+            "node": "Excelチェック",
             "type": "main",
             "index": 0
           }
@@ -436,7 +494,7 @@
       "main": [
         [
           {
-            "node": "成功メッセージ生成",
+            "node": "年次OneDriveアップロード",
             "type": "main",
             "index": 0
           }
@@ -447,7 +505,47 @@
       "main": [
         [
           {
+            "node": "アップロード後処理",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Excelチェック": {
+      "main": [
+        [
+          {
+            "node": "OneDriveアップロード",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "LINE返信（エラー）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "アップロード後処理": {
+      "main": [
+        [
+          {
             "node": "書込み結果確認",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "年次OneDriveアップロード": {
+      "main": [
+        [
+          {
+            "node": "成功メッセージ生成",
             "type": "main",
             "index": 0
           }
