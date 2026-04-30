@@ -12,7 +12,7 @@ domain = 'xvps' + chr(46) + 'jp'
 
 new_content = '\n'.join([
     'SSL_EMAIL=' + email,
-    'SUBDOMAIN=n8n-light-mn',
+    'SUBDOMAIN=n8n-light-m-n',
     'DOMAIN_NAME=' + domain,
     'GENERIC_TIMEZONE=Asia/Tokyo',
     'CLAUDE_API_KEY=' + claude_key,
