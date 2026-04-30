@@ -1,0 +1,100 @@
+{
+  "id": "bm-init-upload-001",
+  "name": "経費管理テンプレート初期アップロード",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "手動実行",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "id": "init-node-01"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst year = 2026;\nconst month = 4;\nconst fileName = `経費管理_${year}年${String(month).padStart(2,'0')}月.xlsx`;\nconst filePath = `/tmp/${fileName}`;\n\nif (!fs.existsSync(filePath)) {\n  throw new Error(`ファイルが見つかりません: ${filePath}`);\n}\n\nconst fileBuffer = fs.readFileSync(filePath);\nconst bin = await this.helpers.prepareBinaryData(\n  fileBuffer,\n  fileName,\n  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'\n);\nreturn [{ json: { fileName, year, month }, binary: { data: bin } }];"
+      },
+      "name": "テンプレートファイル読み込み",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ],
+      "id": "init-node-02"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/経費管理/月次/{{ $json.fileName }}:/content",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "name": "OneDriveアップロード",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        720,
+        300
+      ],
+      "id": "init-node-03"
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json;\nconsole.log('アップロード完了:', JSON.stringify(result));\nreturn [{ json: { success: true, name: result.name, id: result.id } }];"
+      },
+      "name": "完了確認",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        300
+      ],
+      "id": "init-node-04"
+    }
+  ],
+  "connections": {
+    "手動実行": {
+      "main": [
+        [
+          {
+            "node": "テンプレートファイル読み込み",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "テンプレートファイル読み込み": {
+      "main": [
+        [
+          {
+            "node": "OneDriveアップロード",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OneDriveアップロード": {
+      "main": [
+        [
+          {
+            "node": "完了確認",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {}
+}
