@@ -71,37 +71,12 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://api.anthropic.com/v1/messages",
-        "authentication": "none",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "x-api-key",
-              "value": "YOUR_ANTHROPIC_API_KEY"
-            },
-            {
-              "name": "anthropic-version",
-              "value": "2023-06-01"
-            },
-            {
-              "name": "content-type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ {\n  \"model\": \"claude-haiku-4-5-20251001\",\n  \"max_tokens\": 1024,\n  \"stream\": false,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"以下のLINEメッセージは電気工事会社の日報です。全ての現場の情報を抽出してJSON形式で返してください。\\n\\nメッセージ：\\n\" + $json.messageText + \"\\n\\n【会社名の略称対応】以下の略称は正式名称に変換してください：\\n平成 → 平成システム\\nトラスト → トラストテクノス\\nオーク → オークコミュニケーション\\n千里 → 千里スカイハイツ管理組合\\n港 → 港振興業\\nコウシン → 港振興業\\n港振 → 港振興業\\n梶原 → 梶原通信\\nFGE → FGE\\nmtr → mtr\\nライズ → ライズ\\n菊次 → 菊次\\nページ → ページ\\nG-STYLE → G-STYLE\\nジースタイル → G-STYLE\\nGスタイル → G-STYLE\\n\\n【項目の略称対応】以下の略称・表記ゆれを正しく解釈してください：\\n- 区分：昼・日勤 → 昼勤 / 夜・夜勤 → 夜勤 / 省略時は昼勤\\n- 開始・終了：「8〜17」「8時から17時」「8:00-17:00」などすべて対応\\n- 休憩：「休憩60」「休60」など / 省略時は0\\n- 高速料金：「高速」「高速代」「ETC」など\\n- 移動距離：「距離」「移動」「km」など\\n- 駐車場：「駐車」「P」など\\n- 資材費：「資材」「材料」など\\n- 日付：「今日」は本日、「4/25」「4月25日」なども対応 / 年省略時は2026年\\n\\n以下のJSON形式で返してください。現場が複数ある場合はsitesに複数のオブジェクトを入れてください：\\n{\\\"date\\\":\\\"YYYY/MM/DD\\\",\\\"sites\\\":[{\\\"kubun\\\":\\\"昼勤\\\",\\\"companyName\\\":\\\"会社名\\\",\\\"propertyName\\\":\\\"物件名\\\",\\\"startTime\\\":\\\"HH:MM\\\",\\\"endTime\\\":\\\"HH:MM\\\",\\\"breakMin\\\":0,\\\"workContent\\\":\\\"作業内容\\\",\\\"highwayFee\\\":0,\\\"distance\\\":0,\\\"parkingFee\\\":0,\\\"materialFee\\\":0,\\\"personnelNames\\\":null,\\\"personnelCount\\\":null}]}\\n\\nkubunは 昼勤/夜勤 のいずれか。personnelNames・personnelCountは人員がいなければnull。人員が記載されている場合、名前をスペース・読点・中点（・）などで区切られたリストとして認識し、personnelNamesに「名前1・名前2・名前3」形式で、personnelCountには名前の数を自動でカウントして設定してください。（n名）の記載がなくても名前の数から自動計算してください。JSONのみを返してください。\"\n  }]\n} }}",
-        "options": {
-          "timeout": 60000
-        }
+        "mode": "runOnceForAllItems",
+        "jsCode": "const apiKey = 'YOUR_ANTHROPIC_API_KEY';\nconst input = $input.first().json;\n\nconst companyMap = [\n  '平成 → 平成システム', 'トラスト → トラストテクノス', 'オーク → オークコミュニケーション',\n  '千里 → 千里スカイハイツ管理組合', '港 → 港振興業', 'コウシン → 港振興業',\n  '港振 → 港振興業', '梶原 → 梶原通信'\n].join('\\n');\n\nconst prompt = `以下のLINEメッセージは電気工事会社の日報です。全ての現場の情報を抽出してJSON形式で返してください。\\n\\nメッセージ：\\n${input.messageText}\\n\\n【会社名の略称対応】以下の略称は正式名称に変換してください：\\n${companyMap}\\nFGE → FGE\\nmtr → mtr\\nライズ → ライズ\\n菊次 → 菊次\\nページ → ページ\\nG-STYLE → G-STYLE\\nジースタイル → G-STYLE\\nGスタイル → G-STYLE\\n\\n【項目の略称対応】以下の略称・表記ゆれを正しく解釈してください：\\n- 区分：昼・日勤 → 昼勤 / 夜・夜勤 → 夜勤 / 省略時は昼勤\\n- 開始・終了：「8〜17」「8時から17時」「8:00-17:00」などすべて対応\\n- 休憩：「休憩60」「休60」など / 省略時は0\\n- 高速料金：「高速」「高速代」「ETC」など\\n- 移動距離：「距離」「移動」「km」など\\n- 駐車場：「駐車」「P」など\\n- 資材費：「資材」「材料」など\\n- 日付：「今日」は本日、「4/25」「4月25日」なども対応 / 年省略時は2026年\\n\\n以下のJSON形式で返してください。現場が複数ある場合はsitesに複数のオブジェクトを入れてください：\\n{\"date\":\"YYYY/MM/DD\",\"sites\":[{\"kubun\":\"昼勤\",\"companyName\":\"会社名\",\"propertyName\":\"物件名\",\"startTime\":\"HH:MM\",\"endTime\":\"HH:MM\",\"breakMin\":0,\"workContent\":\"作業内容\",\"highwayFee\":0,\"distance\":0,\"parkingFee\":0,\"materialFee\":0,\"personnelNames\":null,\"personnelCount\":null}]}\\n\\nkubunは 昼勤/夜勤 のいずれか。personnelNames・personnelCountは人員がいなければnull。人員が記載されている場合、名前をスペース・読点・中点（・）などで区切られたリストとして認識し、personnelNamesに「名前1・名前2・名前3」形式で、personnelCountには名前の数を自動でカウントして設定してください。（n名）の記載がなくても名前の数から自動計算してください。JSONのみを返してください。`;\n\nconst response = await this.helpers.httpRequest({\n  method: 'POST',\n  url: 'https://api.anthropic.com/v1/messages',\n  headers: {\n    'x-api-key': apiKey,\n    'anthropic-version': '2023-06-01',\n    'content-type': 'application/json'\n  },\n  body: {\n    model: 'claude-haiku-4-5-20251001',\n    max_tokens: 1024,\n    stream: false,\n    messages: [{ role: 'user', content: prompt }]\n  },\n  json: true\n});\n\nreturn [{ json: { ...input, claudeResponse: response } }];\n"
       },
       "name": "Claude API呼び出し",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         880,
         320
@@ -110,7 +85,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $('LINEメッセージ解析').first().json;\nconst claudeResponse = $input.first().json;\n\ntry {\n  const textContent = claudeResponse.content[0].text;\n  const jsonMatch = textContent.match(/\\{[\\s\\S]*\\}/);\n  if (!jsonMatch) throw new Error('Claude応答のJSON抽出失敗');\n\n  const parsed = JSON.parse(jsonMatch[0]);\n  if (!parsed.date || !parsed.sites || parsed.sites.length === 0) {\n    throw new Error('日付または現場情報が取得できませんでした');\n  }\n\n  // 稼働時間を計算\n  for (const site of parsed.sites) {\n    if (site.startTime && site.endTime) {\n      const [sh, sm] = site.startTime.split(':').map(Number);\n      const [eh, em] = site.endTime.split(':').map(Number);\n      let totalMin = (eh * 60 + em) - (sh * 60 + sm);\n      if (totalMin < 0) totalMin += 24 * 60;\n      totalMin -= (site.breakMin || 0);\n      const h = Math.floor(totalMin / 60);\n      const m = totalMin % 60;\n      site.workingTime = `${h}:${String(m).padStart(2, '0')}`;\n    }\n    site.highwayFee   = parseInt(site.highwayFee)  || 0;\n    site.distance     = parseInt(site.distance)     || 0;\n    site.parkingFee   = parseInt(site.parkingFee)   || 0;\n    site.materialFee  = parseInt(site.materialFee)  || 0;\n    site.breakMin     = parseInt(site.breakMin)     || 0;\n  }\n\n  return [{ json: { ...data, parsedDate: parsed.date, sites: parsed.sites, valid: true } }];\n\n} catch (e) {\n  return [{ json: {\n    valid: false,\n    replyToken: data.replyToken,\n    errorMessage: `日報の解析に失敗しました。\\n以下を確認してください：\\n・日付が正しいか（例：2026/04/18）\\n・区分が正しいか（昼勤 / 夜勤）\\n・すでに送信済みでないか`\n  }}];\n}"
+        "jsCode": "const combined = $input.first().json;\nconst data = combined;           // LINEデータ（replyToken, employeeName など）\nconst claudeResponse = combined.claudeResponse;  // Claude APIレスポンス\n\ntry {\n  const textContent = claudeResponse.content[0].text;\n  const jsonMatch = textContent.match(/\\{[\\s\\S]*\\}/);\n  if (!jsonMatch) throw new Error('Claude応答のJSON抽出失敗');\n\n  const parsed = JSON.parse(jsonMatch[0]);\n  if (!parsed.date || !parsed.sites || parsed.sites.length === 0) {\n    throw new Error('日付または現場情報が取得できませんでした');\n  }\n\n  for (const site of parsed.sites) {\n    if (site.startTime && site.endTime) {\n      const [sh, sm] = site.startTime.split(':').map(Number);\n      const [eh, em] = site.endTime.split(':').map(Number);\n      let totalMin = (eh * 60 + em) - (sh * 60 + sm);\n      if (totalMin < 0) totalMin += 24 * 60;\n      totalMin -= (site.breakMin || 0);\n      const h = Math.floor(totalMin / 60);\n      const m = totalMin % 60;\n      site.workingTime = `${h}:${String(m).padStart(2, '0')}`;\n    }\n    site.highwayFee  = parseInt(site.highwayFee)  || 0;\n    site.distance    = parseInt(site.distance)     || 0;\n    site.parkingFee  = parseInt(site.parkingFee)   || 0;\n    site.materialFee = parseInt(site.materialFee)  || 0;\n    site.breakMin    = parseInt(site.breakMin)     || 0;\n  }\n\n  const dateParts = parsed.date.split('/');\n  const fileYear  = parseInt(dateParts[0]);\n  const fileMonth = parseInt(dateParts[1]);\n  const fileName  = `稼働表_${fileYear}年${fileMonth}月.xlsx`;\n\n  return [{ json: { ...data, parsedDate: parsed.date, sites: parsed.sites, valid: true, fileName } }];\n\n} catch (e) {\n  return [{ json: {\n    valid: false,\n    replyToken: data.replyToken,\n    errorMessage: `日報の解析に失敗しました。\\n以下を確認してください：\\n・日付が正しいか（例：2026/05/01）\\n・区分が正しいか（昼勤 / 夜勤）\\n・すでに送信済みでないか`\n  }}];\n}\n"
       },
       "name": "Claude解析結果処理",
       "type": "n8n-nodes-base.code",
