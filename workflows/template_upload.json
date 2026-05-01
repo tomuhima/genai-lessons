@@ -1,0 +1,100 @@
+{
+  "id": "bm-template-upload-001",
+  "name": "経費管理テンプレートアップロード",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "手動実行",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "id": "tmpl-node-01"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst fileName = '経費管理_テンプレート.xlsx';\nconst filePath = `/tmp/${fileName}`;\n\nif (!fs.existsSync(filePath)) {\n  throw new Error(`ファイルが見つかりません: ${filePath}\\npython3 scripts/create_expense_template.py で生成してからコピーしてください`);\n}\n\nconst fileBuffer = fs.readFileSync(filePath);\nconst bin = await this.helpers.prepareBinaryData(\n  fileBuffer,\n  fileName,\n  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'\n);\nreturn [{ json: { fileName }, binary: { data: bin } }];"
+      },
+      "name": "テンプレート読み込み",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ],
+      "id": "tmpl-node-02"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/経費管理/経費管理_テンプレート.xlsx:/content",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "name": "OneDriveアップロード",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        720,
+        300
+      ],
+      "id": "tmpl-node-03"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconsole.log('テンプレートアップロード完了:', r.name, r.id);\nreturn [{ json: { success: true, name: r.name, id: r.id } }];"
+      },
+      "name": "完了確認",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        300
+      ],
+      "id": "tmpl-node-04"
+    }
+  ],
+  "connections": {
+    "手動実行": {
+      "main": [
+        [
+          {
+            "node": "テンプレート読み込み",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "テンプレート読み込み": {
+      "main": [
+        [
+          {
+            "node": "OneDriveアップロード",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OneDriveアップロード": {
+      "main": [
+        [
+          {
+            "node": "完了確認",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {}
+}
