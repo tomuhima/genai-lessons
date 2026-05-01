@@ -121,15 +121,12 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/日報/{{ $json.fileName }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "microsoftDriveOAuth2Api",
-        "options": {}
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input = $input.first().json;\n\nconst fileInfo = await this.helpers.httpRequestWithAuthentication(\n  'microsoftDriveOAuth2Api',\n  {\n    method: 'GET',\n    url: `https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/日報/${input.fileName}`\n  }\n);\n\nreturn [{ json: {\n  ...input,\n  fileId: fileInfo.id,\n  downloadUrl: fileInfo['@microsoft.graph.downloadUrl'],\n  '@microsoft.graph.downloadUrl': fileInfo['@microsoft.graph.downloadUrl']\n} }];\n"
       },
       "name": "ファイル情報取得",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         1540,
         240
@@ -138,7 +135,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const data     = $('Claude解析結果処理').first().json;\n  const fileInfo = $('ファイル情報取得').first().json;\n\n  try {\n    const workbook = new ExcelJS.Workbook();\n    const downloadUrl = fileInfo['@microsoft.graph.downloadUrl'];\n    if (!downloadUrl) throw new Error('ダウンロードURLが取得できませんでした');\n    const res = await this.helpers.httpRequest({ method: 'GET', url: downloadUrl, encoding: 'arraybuffer', returnFullResponse: false });\n    await workbook.xlsx.load(Buffer.from(res), { useSharedStrings: false });\n\n    const MULTI_PERSON = ['梶原通信', 'LLS電気', '株式会社トラストテクノス', '株式会社RISE'];\n    const isMulti = MULTI_PERSON.includes(data.employeeName);\n    const sheet = workbook.getWorksheet(data.employeeName);\n    if (!sheet) throw new Error(`シート「${data.employeeName}」が見つかりません`);\n\n    const normalizeKubun = (k) => {\n      if (!k) return '';\n      const s = String(k).trim();\n      if (s === '昼勤' || s === '昼' || s === '日勤') return '昼勤';\n      if (s === '夜勤' || s === '夜') return '夜勤';\n      return s;\n    };\n\n    const normalizeDate = (val) => {\n      if (!val) return '';\n      if (typeof val === 'object' && typeof val.getTime === 'function') {\n        const d = new Date(val.getTime() + 9 * 3600000);\n        return `${d.getUTCFullYear()}/${String(d.getUTCMonth()+1).padStart(2,'0')}/${String(d.getUTCDate()).padStart(2,'0')}`;\n      }\n      if (typeof val === 'number') {\n        const d = new Date(Math.round((val - 25569) * 86400 * 1000) + 9 * 3600000);\n        return `${d.getUTCFullYear()}/${String(d.getUTCMonth()+1).padStart(2,'0')}/${String(d.getUTCDate()).padStart(2,'0')}`;\n      }\n      const str = String(val).trim();\n      const mDMatch = str.match(/^(\\d{1,2})月(\\d{1,2})日$/);\n      if (mDMatch) {\n        const year = (data.parsedDate || '').split('/')[0] || '2026';\n        return `${year}/${String(parseInt(mDMatch[1])).padStart(2,'0')}/${String(parseInt(mDMatch[2])).padStart(2,'0')}`;\n      }\n      return str;\n    };\n\n    const isDuplicate = (targetDate, targetKubun, targetCompany, targetProperty) => {\n      let found = false;\n      sheet.eachRow((row, num) => {\n        if (num < 3 || found) return;\n        const rowDate    = normalizeDate(row.getCell(1).value);\n        const rowKubun   = normalizeKubun(row.getCell(2).value);\n        const rowCompany = String(row.getCell(3).value || '').trim();\n        const rowProp    = String(row.getCell(4).value || '').trim();\n        if (rowDate === targetDate && rowKubun === targetKubun &&\n            rowCompany === targetCompany && rowProp === targetProperty) {\n          found = true;\n        }\n      });\n      return found;\n    };\n\n    const findNextEmptyRow = () => {\n      let lastRow = sheet.lastRow ? sheet.lastRow.number : 2;\n      for (let i = 3; i <= lastRow + 1; i++) {\n        const row = sheet.getRow(i);\n        const cellA = row.getCell(1).value;\n        if (!cellA || String(cellA).trim() === '') return row;\n      }\n      return sheet.getRow(lastRow + 1);\n    };\n\n    const duplicates = [];\n    let written = false;\n\n    for (const site of data.sites) {\n      const kubun   = normalizeKubun(site.kubun);\n      const company = site.companyName || '';\n      const prop    = site.propertyName || '';\n\n      if (isDuplicate(data.parsedDate, kubun, company, prop)) {\n        duplicates.push(`${company}／${prop}`);\n        continue;\n      }\n\n      const row = findNextEmptyRow();\n      const dateCell = row.getCell(1);\n      dateCell.value = data.parsedDate || '';\n      dateCell.numFmt = '@';\n      row.getCell(2).value = kubun;\n      row.getCell(3).value = company;\n      row.getCell(4).value = prop;\n      row.getCell(5).value = site.startTime   || '';\n      row.getCell(6).value = site.endTime     || '';\n      row.getCell(7).value = site.breakMin    || 0;\n      row.getCell(8).value = site.workingTime || '';\n      row.getCell(9).value = site.workContent || '';\n      if (isMulti) {\n        row.getCell(10).value = site.personnelCount || '';\n        row.getCell(11).value = site.personnelNames || '';\n        row.getCell(12).value = site.highwayFee;\n        row.getCell(13).value = site.distance;\n        row.getCell(14).value = site.parkingFee;\n        row.getCell(15).value = site.materialFee;\n      } else {\n        row.getCell(10).value = site.highwayFee;\n        row.getCell(11).value = site.distance;\n        row.getCell(12).value = site.parkingFee;\n        row.getCell(13).value = site.materialFee;\n      }\n      row.commit();\n      written = true;\n    }\n\n    if (!written) {\n      const msg = `既に送信済みの日報です。\\n${duplicates.join('\\n')}`;\n      return [{ json: { valid: false, replyToken: data.replyToken, errorMessage: msg } }];\n    }\n\n    const out = await workbook.xlsx.writeBuffer({ useSharedStrings: false });\n    const fileName = fileInfo.name || '稼働表.xlsx';\n    const bin = await this.helpers.prepareBinaryData(\n      Buffer.from(out), fileName,\n      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'\n    );\n    const dupMsg = duplicates.length > 0 ? `\\n（重複のためスキップ：${duplicates.join('、')}）` : '';\n    return [{ json: { ...data, valid: true, dupMsg }, binary: { data: bin } }];\n\n  } catch (err) {\n    return [{ json: { valid: false, replyToken: data.replyToken, errorMessage: err.message } }];\n  }\n})();"
+        "jsCode": "const ExcelJS = require('exceljs');\n\nreturn await (async () => {\n  const data = $input.first().json;  // ファイル情報取得からの全データ（LINE+解析+ファイル情報）\n  const downloadUrl = data.downloadUrl || data['@microsoft.graph.downloadUrl'];\n\n  try {\n    const workbook = new ExcelJS.Workbook();\n    if (!downloadUrl) throw new Error('ダウンロードURLが取得できませんでした');\n    const res = await this.helpers.httpRequest({ method: 'GET', url: downloadUrl, encoding: 'arraybuffer', returnFullResponse: false });\n    const buffer = Buffer.from(res);\n\n    await workbook.xlsx.load(buffer, { useSharedStrings: false });\n\n    const MULTI_PERSON = ['梶原通信', 'LLS電気', '株式会社トラストテクノス', '株式会社RISE'];\n    const isMulti = MULTI_PERSON.includes(data.employeeName);\n\n    const sheet = workbook.getWorksheet(data.employeeName);\n    if (!sheet) throw new Error(`シート「${data.employeeName}」が見つかりません`);\n\n    const toDate = (str) => {\n      if (!str) return null;\n      const p = str.split('/');\n      return new Date(Date.UTC(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2])));\n    };\n\n    const findOrCreateRow = () => {\n      let target = null;\n      sheet.eachRow((row, num) => {\n        if (num < 2 || target) return;\n        const cell = row.getCell(1).value;\n        if (!cell) return;\n        let rowDate = '';\n        if (cell instanceof Date) {\n          rowDate = `${cell.getUTCFullYear()}/${String(cell.getUTCMonth()+1).padStart(2,'0')}/${String(cell.getUTCDate()).padStart(2,'0')}`;\n        } else {\n          rowDate = String(cell).trim();\n        }\n        if (rowDate === data.parsedDate && !row.getCell(3).value) target = row;\n      });\n      if (!target) {\n        const n = sheet.lastRow ? sheet.lastRow.number + 1 : 2;\n        target = sheet.getRow(n);\n        target.getCell(1).value  = toDate(data.parsedDate);\n        target.getCell(1).numFmt = 'YYYY/MM/DD';\n      }\n      return target;\n    };\n\n    for (const site of data.sites) {\n      const row = findOrCreateRow();\n      row.getCell(2).value = site.companyName  || '';\n      row.getCell(3).value = site.kubun        || '';\n      row.getCell(4).value = site.propertyName || '';\n      row.getCell(5).value = site.startTime    || '';\n      row.getCell(6).value = site.endTime      || '';\n      row.getCell(7).value = site.breakMin     || 0;\n      row.getCell(8).value = site.workingTime  || '';\n      row.getCell(9).value = site.workContent  || '';\n\n      if (isMulti) {\n        row.getCell(10).value = site.personnelCount || '';\n        row.getCell(11).value = site.personnelNames || '';\n        row.getCell(12).value = site.highwayFee;\n        row.getCell(13).value = site.distance;\n        row.getCell(14).value = site.parkingFee;\n        row.getCell(15).value = site.materialFee;\n      } else {\n        row.getCell(10).value = site.highwayFee;\n        row.getCell(11).value = site.distance;\n        row.getCell(12).value = site.parkingFee;\n        row.getCell(13).value = site.materialFee;\n      }\n    }\n\n    const out = await workbook.xlsx.writeBuffer({ useSharedStrings: false });\n    const bin = await this.helpers.prepareBinaryData(\n      Buffer.from(out),\n      data.fileName,\n      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'\n    );\n\n    return [{ json: { ...data, valid: true }, binary: { data: bin } }];\n\n  } catch (err) {\n    return [{ json: { valid: false, replyToken: data.replyToken, errorMessage: err.message } }];\n  }\n})();\n"
       },
       "name": "Excel書き込み",
       "type": "n8n-nodes-base.code",
@@ -174,27 +171,12 @@
     },
     {
       "parameters": {
-        "method": "PUT",
-        "url": "https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/日報/{{ $('ファイル情報取得').first().json.name }}:/content",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "microsoftDriveOAuth2Api",
-        "sendBody": true,
-        "contentType": "binaryData",
-        "inputDataFieldName": "data",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            }
-          ]
-        },
-        "options": {}
+        "mode": "runOnceForAllItems",
+        "jsCode": "const data = $input.first().json;\n\nconst buf = await this.helpers.getBinaryDataBuffer('data');\n\nawait this.helpers.httpRequestWithAuthentication(\n  'microsoftDriveOAuth2Api',\n  {\n    method: 'PUT',\n    url: `https://graph.microsoft.com/v1.0/me/drive/items/${data.fileId}/content`,\n    headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },\n    body: buf,\n    encoding: null\n  }\n);\n\nreturn [{ json: { ...data } }];\n"
       },
       "name": "アップロード",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         2420,
         160
@@ -203,7 +185,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $('Claude解析結果処理').first().json;\nconst msg = 'お疲れ様です　日報を確認しました　ありがとうございます。';\nreturn [{ json: { replyToken: data.replyToken, replyMessage: msg } }];"
+        "jsCode": "const data = $input.first().json;\nconst msg = 'お疲れ様です　日報を確認しました　ありがとうございます。';\nreturn [{ json: { replyToken: data.replyToken, replyMessage: msg } }];\n"
       },
       "name": "成功返信生成",
       "type": "n8n-nodes-base.code",
@@ -311,15 +293,12 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/日報/{{ $json.fileName }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "microsoftDriveOAuth2Api",
-        "options": {}
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input = $input.first().json;\nlet currentFileInfo = null;\ntry {\n  currentFileInfo = await this.helpers.httpRequestWithAuthentication(\n    'microsoftDriveOAuth2Api',\n    { method: 'GET', url: `https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/日報/${input.fileName}` }\n  );\n} catch(e) {}\nreturn [{ json: { ...input, currentFileInfo } }];\n"
       },
       "name": "請求集計ファイル情報取得（当月）",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         1120,
         280
@@ -328,22 +307,12 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/日報/{{ $json.prevFileName }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "microsoftDriveOAuth2Api",
-        "options": {
-          "batching": {
-            "batch": {
-              "batchSize": 1
-            }
-          }
-        },
-        "onError": "continueRegularOutput"
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input = $input.first().json;\nlet prevFileInfo = null;\ntry {\n  prevFileInfo = await this.helpers.httpRequestWithAuthentication(\n    'microsoftDriveOAuth2Api',\n    { method: 'GET', url: `https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/日報/${input.prevFileName}` }\n  );\n} catch(e) {}\nreturn [{ json: { ...input, prevFileInfo } }];\n"
       },
       "name": "請求集計ファイル情報取得（前月）",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         1340,
         280
@@ -352,7 +321,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const data = $('請求集計準備').first().json;\n  const currentFI = $('請求集計ファイル情報取得（当月）').first().json;\n  let prevFI = null;\n  try { prevFI = $('請求集計ファイル情報取得（前月）').first().json; } catch(e) {}\n  const MULTI = ['梶原通信','LLS電気','株式会社トラストテクノス','株式会社RISE'];\n  const isMulti = MULTI.includes(data.companyName);\n  const highwayCol = isMulti ? 12 : 10;\n  const distanceCol = isMulti ? 13 : 11;\n  let startDate, endDate;\n  if (data.is20) {\n    const pY = data.month === 1 ? data.year - 1 : data.year;\n    const pM = data.month === 1 ? 12 : data.month - 1;\n    startDate = new Date(Date.UTC(pY, pM - 1, 21));\n    endDate = new Date(Date.UTC(data.year, data.month - 1, 20));\n  } else {\n    startDate = new Date(Date.UTC(data.year, data.month - 1, 1));\n    endDate = new Date(Date.UTC(data.year, data.month, 0));\n  }\n  const records = {};\n  const processWB = async (fi) => {\n    if (!fi || !fi['@microsoft.graph.downloadUrl']) return;\n    const res = await this.helpers.httpRequest({ method: 'GET', url: fi['@microsoft.graph.downloadUrl'], encoding: 'arraybuffer', returnFullResponse: false });\n    const wb = new ExcelJS.Workbook();\n    await wb.xlsx.load(Buffer.from(res), { useSharedStrings: false });\n    wb.eachSheet((sheet) => {\n      const empName = sheet.name;\n      sheet.eachRow((row, num) => {\n        if (num < 2) return;\n        const dateCell = row.getCell(1).value;\n        const company = row.getCell(3).value;\n        if (!company || String(company).trim() !== data.companyName) return;\n        let d;\n        if (dateCell && typeof dateCell.getTime === 'function') {\n          d = new Date(dateCell.getTime() + 9 * 3600000);\n        } else if (typeof dateCell === 'number') {\n          d = new Date(Math.round((dateCell - 25569) * 86400 * 1000) + 9 * 3600000);\n        } else if (dateCell) {\n          const str = String(dateCell).trim();\n          const match = str.match(/^(\\d{4})\\/(\\d{1,2})\\/(\\d{1,2})$/);\n          if (!match) return;\n          d = new Date(Date.UTC(parseInt(match[1]), parseInt(match[2])-1, parseInt(match[3])));\n        } else {\n          return;\n        }\n        const dUTC = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));\n        if (dUTC < startDate || dUTC > endDate) return;\n        const dateStr = `${d.getUTCMonth()+1}/${d.getUTCDate()}`;\n        const shift = row.getCell(2).value || '';\n        const site = row.getCell(4).value || '';\n        const key = `${dUTC.getTime()}|${shift}|${site}`;\n        const hw = row.getCell(highwayCol).value || 0;\n        const dist = row.getCell(distanceCol).value || 0;\n        if (!records[key]) records[key] = { dateStr, shift, site, employees: [], highway: 0, distance: 0, sortKey: dUTC.getTime() };\n        if (!records[key].employees.includes(empName)) records[key].employees.push(empName);\n        records[key].highway = Math.max(records[key].highway, hw);\n        records[key].distance = Math.max(records[key].distance, dist);\n      });\n    });\n  };\n  await processWB(currentFI);\n  if (data.is20 && prevFI) await processWB(prevFI);\n  const sorted = Object.values(records).sort((a, b) => a.sortKey - b.sortKey);\n  let totalHighway = 0, totalDistance = 0;\n  const lines = sorted.map(r => {\n    totalHighway += r.highway; totalDistance += r.distance;\n    let line = `${r.dateStr}  ${r.shift}  ${r.site}  ${r.employees.join(' ')}`;\n    if (r.highway > 0) line += `  高速:¥${r.highway.toLocaleString('ja-JP')}`;\n    if (r.distance > 0) line += `  距離:${r.distance}km`;\n    return line;\n  });\n  const sM = data.is20 ? (data.month === 1 ? 12 : data.month - 1) : data.month;\n  const sD = data.is20 ? 21 : 1;\n  const eM = data.is20 ? data.month : data.month;\n  const eD = data.is20 ? 20 : new Date(data.year, data.month, 0).getDate();\n  const period = `${sM}/${sD}〜${eM}/${eD}`;\n  let msg = `【${data.companyName} 請求集計】\n期間：${period}\n\n`;\n  if (lines.length === 0) { msg += '該当する稼働記録がありません'; }\n  else {\n    msg += lines.join('\\n') + '\\n\\n────────────\\n';\n    msg += `稼働日数：${sorted.length}日`;\n    if (totalHighway > 0) msg += `\\n高速合計：¥${totalHighway.toLocaleString('ja-JP')}`;\n    if (totalDistance > 0) msg += `\\n距離合計：${totalDistance}km`;\n  }\n  const billingFileName = `請求集計_${data.year}年${String(data.month).padStart(2,'0')}月.xlsx`;\n  return [{ json: { replyToken: data.replyToken, replyMessage: msg, records: sorted, companyName: data.companyName, billingFileName, year: data.year, month: data.month } }];\n})();"
+        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const data = $input.first().json;\n  const currentFI = data.currentFileInfo;\n  const prevFI = data.prevFileInfo;\n\n  const MULTI = ['梶原通信','LLS電気','株式会社トラストテクノス','株式会社RISE'];\n  const isMulti = MULTI.includes(data.companyName);\n  const highwayCol = isMulti ? 12 : 10;\n  const distanceCol = isMulti ? 13 : 11;\n\n  let startDate, endDate;\n  if (data.is20) {\n    const pY = data.month === 1 ? data.year - 1 : data.year;\n    const pM = data.month === 1 ? 12 : data.month - 1;\n    startDate = new Date(Date.UTC(pY, pM - 1, 21));\n    endDate = new Date(Date.UTC(data.year, data.month - 1, 20));\n  } else {\n    startDate = new Date(Date.UTC(data.year, data.month - 1, 1));\n    endDate = new Date(Date.UTC(data.year, data.month, 0));\n  }\n\n  const records = {};\n  const processWB = async (fi) => {\n    if (!fi || !fi['@microsoft.graph.downloadUrl']) return;\n    const res = await this.helpers.httpRequest({ method: 'GET', url: fi['@microsoft.graph.downloadUrl'], encoding: 'arraybuffer', returnFullResponse: false });\n    const wb = new ExcelJS.Workbook();\n    await wb.xlsx.load(Buffer.from(res), { useSharedStrings: false });\n    wb.eachSheet((sheet) => {\n      const empName = sheet.name;\n      sheet.eachRow((row, num) => {\n        if (num < 2) return;\n        const dateCell = row.getCell(1).value;\n        const company = row.getCell(3).value;\n        if (!company || String(company).trim() !== data.companyName) return;\n        if (!dateCell || typeof dateCell.getTime !== 'function') return;\n        const d = new Date(dateCell.getTime() + 9 * 3600000);\n        const dUTC = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));\n        if (dUTC < startDate || dUTC > endDate) return;\n        const dateStr = `${d.getUTCMonth()+1}/${d.getUTCDate()}`;\n        const shift = row.getCell(2).value || '';\n        const site = row.getCell(4).value || '';\n        const key = `${dUTC.getTime()}|${shift}|${site}`;\n        const hw = row.getCell(highwayCol).value || 0;\n        const dist = row.getCell(distanceCol).value || 0;\n        if (!records[key]) records[key] = { dateStr, shift, site, employees: [], highway: 0, distance: 0, sortKey: dUTC.getTime() };\n        if (!records[key].employees.includes(empName)) records[key].employees.push(empName);\n        records[key].highway = Math.max(records[key].highway, hw);\n        records[key].distance = Math.max(records[key].distance, dist);\n      });\n    });\n  };\n\n  await processWB(currentFI);\n  if (data.is20 && prevFI) await processWB(prevFI);\n\n  const sorted = Object.values(records).sort((a, b) => a.sortKey - b.sortKey);\n  let totalHighway = 0, totalDistance = 0;\n  const lines = sorted.map(r => {\n    totalHighway += r.highway; totalDistance += r.distance;\n    let line = `${r.dateStr}  ${r.shift}  ${r.site}  ${r.employees.join(' ')}`;\n    if (r.highway > 0) line += `  高速:¥${r.highway.toLocaleString('ja-JP')}`;\n    if (r.distance > 0) line += `  距離:${r.distance}km`;\n    return line;\n  });\n\n  const sM = data.is20 ? (data.month === 1 ? 12 : data.month - 1) : data.month;\n  const sD = data.is20 ? 21 : 1;\n  const eM = data.is20 ? data.month : data.month;\n  const eD = data.is20 ? 20 : new Date(data.year, data.month, 0).getDate();\n  const period = `${sM}/${sD}〜${eM}/${eD}`;\n\n  let msg = `【${data.companyName} 請求集計】\\n期間：${period}\\n\\n`;\n  if (lines.length === 0) { msg += '該当する稼働記録がありません'; }\n  else {\n    msg += lines.join('\\n') + '\\n\\n────────────\\n';\n    msg += `稼働日数：${sorted.length}日`;\n    if (totalHighway > 0) msg += `\\n高速合計：¥${totalHighway.toLocaleString('ja-JP')}`;\n    if (totalDistance > 0) msg += `\\n距離合計：${totalDistance}km`;\n  }\n\n  const billingFileName = `請求集計_${data.year}年${String(data.month).padStart(2,'0')}月.xlsx`;\n  return [{ json: { replyToken: data.replyToken, replyMessage: msg, records: sorted, companyName: data.companyName, billingFileName, year: data.year, month: data.month } }];\n})();\n"
       },
       "name": "請求集計処理",
       "type": "n8n-nodes-base.code",
@@ -378,16 +347,12 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/請求集計/{{ $json.billingFileName }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "microsoftDriveOAuth2Api",
-        "options": {},
-        "onError": "continueRegularOutput"
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input = $input.first().json;\nlet fileInfo = null;\ntry {\n  fileInfo = await this.helpers.httpRequestWithAuthentication(\n    'microsoftDriveOAuth2Api',\n    { method: 'GET', url: `https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/請求集計/${input.billingFileName}` }\n  );\n} catch(e) {}\nreturn [{ json: { ...input, excelFileInfo: fileInfo } }];\n"
       },
       "name": "請求集計Excelファイル情報取得",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         2860,
         380
@@ -396,7 +361,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const data = $input.first().json;\n  if (!data.hasBilling) return [{ json: { hasBilling: false } }];\n\n  const normalize = (name) =>\n    (name || '').replace(/株式会社|有限会社|合同会社|一般社団法人|一般財団法人/g, '').trim();\n\n  const wb = new ExcelJS.Workbook();\n  const downloadUrl = data['@microsoft.graph.downloadUrl'];\n\n  if (downloadUrl) {\n    try {\n      const res = await this.helpers.httpRequest({\n        method: 'GET', url: downloadUrl,\n        encoding: 'arraybuffer', returnFullResponse: false\n      });\n      await wb.xlsx.load(Buffer.from(res), { useSharedStrings: false });\n    } catch(e) {}\n  }\n\n  for (const site of data.billingSites) {\n    const sheetName = normalize(site.companyName);\n    let sheet = wb.getWorksheet(sheetName);\n    if (!sheet) {\n      sheet = wb.addWorksheet(sheetName);\n      const hdr = sheet.getRow(1);\n      hdr.getCell(1).value = '日付';\n      hdr.getCell(2).value = '区分';\n      hdr.getCell(3).value = '現場名';\n      hdr.getCell(4).value = '人員名';\n      hdr.getCell(5).value = '高速(円)';\n      hdr.getCell(6).value = '距離(km)';\n      hdr.getCell(7).value = '駐車場(円)';\n      hdr.font = { bold: true };\n      hdr.commit();\n    }\n    let lastRow = 1;\n    sheet.eachRow((row, num) => { lastRow = num; });\n    const newRow = sheet.getRow(lastRow + 1);\n    const billingDateCell = newRow.getCell(1);\n    billingDateCell.value = data.parsedDate;\n    billingDateCell.numFmt = '@';\n    newRow.getCell(2).value = site.kubun || '';\n    newRow.getCell(3).value = site.propertyName || '';\n    newRow.getCell(4).value = data.employeeName || '';\n    newRow.getCell(5).value = site.highwayFee || 0;\n    newRow.getCell(6).value = site.distance || 0;\n    newRow.getCell(7).value = site.parkingFee || 0;\n    newRow.commit();\n    sheet.columns.forEach(col => {\n      let maxLen = 4;\n      col.eachCell({ includeEmpty: false }, cell => {\n        const len = cell.value ? String(cell.value).length * 2 : 0;\n        if (len > maxLen) maxLen = len;\n      });\n      col.width = Math.min(maxLen + 2, 30);\n    });\n  }\n\n  const buf = await wb.xlsx.writeBuffer({ useSharedStrings: false });\n  const bin = await this.helpers.prepareBinaryData(\n    Buffer.from(buf), data.billingFileName,\n    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'\n  );\n  return [{ json: { ...data }, binary: { data: bin } }];\n})();"
+        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const data = $input.first().json;\n  if (!data.hasBilling) return [{ json: { hasBilling: false } }];\n\n  const normalize = (name) =>\n    (name || '').replace(/株式会社|有限会社|合同会社|一般社団法人|一般財団法人/g, '').trim();\n\n  const wb = new ExcelJS.Workbook();\n  const downloadUrl = data.excelFileInfo && data.excelFileInfo['@microsoft.graph.downloadUrl'];\n\n  if (downloadUrl) {\n    try {\n      const res = await this.helpers.httpRequest({ method: 'GET', url: downloadUrl, encoding: 'arraybuffer', returnFullResponse: false });\n      await wb.xlsx.load(Buffer.from(res), { useSharedStrings: false });\n    } catch(e) {}\n  }\n\n  for (const site of data.billingSites) {\n    const sheetName = normalize(site.companyName);\n    let sheet = wb.getWorksheet(sheetName);\n    if (!sheet) {\n      sheet = wb.addWorksheet(sheetName);\n      const hdr = sheet.getRow(1);\n      hdr.getCell(1).value = '日付'; hdr.getCell(2).value = '区分';\n      hdr.getCell(3).value = '現場名'; hdr.getCell(4).value = '人員名';\n      hdr.getCell(5).value = '高速(円)'; hdr.getCell(6).value = '距離(km)';\n      hdr.getCell(7).value = '駐車場(円)'; hdr.font = { bold: true }; hdr.commit();\n    }\n    let lastRow = 1;\n    sheet.eachRow((row, num) => { lastRow = num; });\n    const newRow = sheet.getRow(lastRow + 1);\n    newRow.getCell(1).value = data.parsedDate;\n    newRow.getCell(2).value = site.kubun || '';\n    newRow.getCell(3).value = site.propertyName || '';\n    newRow.getCell(4).value = data.employeeName || '';\n    newRow.getCell(5).value = site.highwayFee || 0;\n    newRow.getCell(6).value = site.distance || 0;\n    newRow.getCell(7).value = site.parkingFee || 0;\n    newRow.commit();\n  }\n\n  const buf = await wb.xlsx.writeBuffer({ useSharedStrings: false });\n  const bin = await this.helpers.prepareBinaryData(\n    Buffer.from(buf), data.billingFileName,\n    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'\n  );\n  return [{ json: { ...data }, binary: { data: bin } }];\n})();\n"
       },
       "name": "請求集計Excel書き込み",
       "type": "n8n-nodes-base.code",
@@ -409,27 +374,12 @@
     },
     {
       "parameters": {
-        "method": "PUT",
-        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/請求集計/{{ $json.billingFileName }}:/content",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "microsoftDriveOAuth2Api",
-        "sendBody": true,
-        "contentType": "binaryData",
-        "inputDataFieldName": "data",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            }
-          ]
-        },
-        "options": {}
+        "mode": "runOnceForAllItems",
+        "jsCode": "const data = $input.first().json;\nconst buf = await this.helpers.getBinaryDataBuffer('data');\n\nconst fileId = data.excelFileInfo && data.excelFileInfo.id;\nconst url = fileId\n  ? `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/content`\n  : `https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/請求集計/${data.billingFileName}:/content`;\n\nawait this.helpers.httpRequestWithAuthentication(\n  'microsoftDriveOAuth2Api',\n  {\n    method: 'PUT',\n    url,\n    headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },\n    body: buf,\n    encoding: null\n  }\n);\n\nreturn [{ json: { ...data } }];\n"
       },
       "name": "請求集計アップロード",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         3300,
         380
@@ -482,7 +432,7 @@
         380
       ],
       "parameters": {
-        "jsCode": "return await (async () => {\n  const lineToken = 'Bearer DKt6qGilWRHXrKlH9W6OTHsIStuvR9BQ9h+DG7LN/5Iit59+sk1wNF+rGWOD9SX687OmB/TF5jpNnXkDSiR31Rm23yc0aLJFzL93ljoBHvUQOrS14Pi2d5ixBmlrG5VJh0vpGuno4BAaIu35GsL0NwdB04t89/1O/w1cDnyilFU=';\n  const NOZOE_ID = 'Uc1e1e958fb952752c3d34628a17585a1';\n\n  let fileName = '';\n  let companyNames = '';\n  try {\n    const billing = $('請求集計書き込み準備').first().json;\n    fileName = billing.billingFileName || '';\n    companyNames = (billing.billingSites || []).map(s => s.companyName).join('、');\n  } catch(e) {}\n\n  const msg = fileName\n    ? `請求集計を更新しました\\nファイル: ${fileName}\\n対象会社: ${companyNames}`\n    : '請求集計を更新しました';\n\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/push',\n    headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n    body: { to: NOZOE_ID, messages: [{ type: 'text', text: msg }] },\n    json: true\n  });\n\n  return [{ json: { done: true } }];\n})();"
+        "jsCode": "return await (async () => {\n  const lineToken = 'Bearer DKt6qGilWRHXrKlH9W6OTHsIStuvR9BQ9h+DG7LN/5Iit59+sk1wNF+rGWOD9SX687OmB/TF5jpNnXkDSiR31Rm23yc0aLJFzL93ljoBHvUQOrS14Pi2d5ixBmlrG5VJh0vpGuno4BAaIu35GsL0NwdB04t89/1O/w1cDnyilFU=';\n  const NOZOE_ID = 'Uc1e1e958fb952752c3d34628a17585a1';\n\n  const billing = $input.first().json;\n  const fileName = billing.billingFileName || '';\n  const companyNames = (billing.billingSites || []).map(s => s.companyName).join('、');\n\n  const msg = fileName\n    ? `請求集計を更新しました\\nファイル: ${fileName}\\n対象会社: ${companyNames}`\n    : '請求集計を更新しました';\n\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/push',\n    headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n    body: { to: NOZOE_ID, messages: [{ type: 'text', text: msg }] },\n    json: true\n  });\n\n  return [{ json: { done: true } }];\n})();\n"
       }
     }
   ],
