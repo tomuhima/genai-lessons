@@ -1,0 +1,972 @@
+{
+  "name": "日報システム v3（n8n 2.8.4対応）",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "daily-report",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        220,
+        400
+      ],
+      "id": "webhook_001",
+      "webhookId": "daily-report"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "options": {}
+      },
+      "name": "Webhook応答",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        440,
+        200
+      ],
+      "id": "respond_001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\nif (!body.events || body.events.length === 0) return [];\n\nconst EMPLOYEE_MAP = {\n  \"Uc1e1e958fb952752c3d34628a17585a1\": \"野添優\",\n  \"Uf662ab811bee1780522da7356c0efb9e\": \"丸田翔吾\",\n  \"Ua9a65f01bf77adcc825b05811950480d\": \"源地健史\",\n  \"U65929805c0527b9f75b5276fc250c304\": \"服部秀一\",\n  \"Uadfb98160637cc7f96bccb051c4a51f9\": \"梶原通信\",\n  \"REPLACE_IMOTO_USERID\":              \"井本貴史\",\n  \"REPLACE_LLS_USERID\":                \"LLS電気\",\n  \"REPLACE_TRUST_USERID\":              \"株式会社トラストテクノス\",\n  \"REPLACE_RISE_USERID\":               \"株式会社RISE\"\n};\n\nconst results = [];\nfor (const event of body.events) {\n  if (event.type !== 'message' || event.message.type !== 'text') continue;\n\n  const userId     = event.source.userId;\n  const replyToken = event.replyToken;\n  const text       = event.message.text.trim();\n\n  const now   = new Date();\n  const year  = now.getFullYear();\n  const month = now.getMonth() + 1;\n  const fileName = `稼働表_${year}年${month}月.xlsx`;\n\n  const extract = (label, str) => {\n    const m = str.match(new RegExp(label + '[：:]\\\\s*(.+)'));\n    return m ? m[1].trim() : null;\n  };\n\n  if (text.startsWith('請求集計')) {\n    const employeeName = EMPLOYEE_MAP[userId] || 'unknown';\n    const companyName = extract('会社名', text) || text.replace(/^請求集計[\\\\s　]*/, '').trim();\n    if (!companyName) {\n      results.push({ json: { valid: false, replyToken, errorMessage: '会社名を入力してください\\n例：\\n請求集計\\n会社名：梶原通信' } });\n      continue;\n    }\n    results.push({ json: { valid: true, messageType: 'billing_query', replyToken, userId, employeeName, companyName, fileName, year, month } });\n    continue;\n  }\n\n  if (!text.startsWith('日報')) {\n    results.push({ json: { valid: false, replyToken, errorMessage: '「日報」から始めてください' } });\n    continue;\n  }\n\n  const employeeName = EMPLOYEE_MAP[userId];\n  if (!employeeName) {\n    results.push({ json: { valid: false, replyToken, errorMessage: 'このアカウントは登録されていません。管理者にお問い合わせください。' } });\n    continue;\n  }\n\n  results.push({ json: {\n    valid: true,\n    messageType: 'daily_report',\n    replyToken,\n    userId,\n    employeeName,\n    fileName,\n    year,\n    month,\n    messageText: text\n  }});\n}\nreturn results;\n"
+      },
+      "name": "LINEメッセージ解析",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        400
+      ],
+      "id": "line_parse"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "バリデーション確認",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        400
+      ],
+      "id": "validation"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.messageType }}",
+              "rightValue": "billing_query",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "メッセージタイプ判定",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        880,
+        400
+      ],
+      "id": "msg_type"
+    },
+    {
+      "parameters": {
+        "jsCode": "const apiKey = 'YOUR_ANTHROPIC_API_KEY';\nconst input = $input.first().json;\n\nconst companyMap = [\n  '平成 → 平成システム', 'トラスト → トラストテクノス', 'オーク → オークコミュニケーション',\n  '千里 → 千里スカイハイツ管理組合', '港 → 港振興業', 'コウシン → 港振興業',\n  '港振 → 港振興業', '梶原 → 梶原通信'\n].join('\\n');\n\nconst prompt = `以下のLINEメッセージは電気工事会社の日報です。全ての現場の情報を抽出してJSON形式で返してください。\\n\\nメッセージ：\\n${input.messageText}\\n\\n【会社名の略称対応】以下の略称は正式名称に変換してください：\\n${companyMap}\\nFGE → FGE\\nmtr → mtr\\nライズ → ライズ\\n菊次 → 菊次\\nページ → ページ\\nG-STYLE → G-STYLE\\nジースタイル → G-STYLE\\nGスタイル → G-STYLE\\n\\n【項目の略称対応】以下の略称・表記ゆれを正しく解釈してください：\\n- 区分：昼・日勤 → 昼勤 / 夜・夜勤 → 夜勤 / 省略時は昼勤\\n- 開始・終了：「8〜17」「8時から17時」「8:00-17:00」などすべて対応\\n- 休憩：「休憩60」「休60」など / 省略時は0\\n- 高速料金：「高速」「高速代」「ETC」など\\n- 移動距離：「距離」「移動」「km」など\\n- 駐車場：「駐車」「P」など\\n- 資材費：「資材」「材料」など\\n- 日付：「今日」は本日、「4/25」「4月25日」なども対応 / 年省略時は2026年\\n\\n以下のJSON形式で返してください。現場が複数ある場合はsitesに複数のオブジェクトを入れてください：\\n{\"date\":\"YYYY/MM/DD\",\"sites\":[{\"kubun\":\"昼勤\",\"companyName\":\"会社名\",\"propertyName\":\"物件名\",\"startTime\":\"HH:MM\",\"endTime\":\"HH:MM\",\"breakMin\":0,\"workContent\":\"作業内容\",\"highwayFee\":0,\"distance\":0,\"parkingFee\":0,\"materialFee\":0,\"personnelNames\":null,\"personnelCount\":null}]}\\n\\nkubunは 昼勤/夜勤 のいずれか。personnelNames・personnelCountは人員がいなければnull。人員が記載されている場合、名前をスペース・読点・中点（・）などで区切られたリストとして認識し、personnelNamesに「名前1・名前2・名前3」形式で、personnelCountには名前の数を自動でカウントして設定してください。（n名）の記載がなくても名前の数から自動計算してください。JSONのみを返してください。`;\n\nconst response = await this.helpers.httpRequest({\n  method: 'POST',\n  url: 'https://api.anthropic.com/v1/messages',\n  headers: {\n    'x-api-key': apiKey,\n    'anthropic-version': '2023-06-01',\n    'content-type': 'application/json'\n  },\n  body: {\n    model: 'claude-haiku-4-5-20251001',\n    max_tokens: 1024,\n    stream: false,\n    messages: [{ role: 'user', content: prompt }]\n  },\n  json: true\n});\n\nreturn [{ json: { ...input, claudeResponse: response } }];\n"
+      },
+      "name": "Claude API呼び出し",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        600
+      ],
+      "id": "claude_api"
+    },
+    {
+      "parameters": {
+        "jsCode": "const combined = $input.first().json;\nconst data = combined;\nconst claudeResponse = combined.claudeResponse;\n\ntry {\n  const textContent = claudeResponse.content[0].text;\n  const jsonMatch = textContent.match(/\\{[\\s\\S]*\\}/);\n  if (!jsonMatch) throw new Error('Claude応答のJSON抽出失敗');\n\n  const parsed = JSON.parse(jsonMatch[0]);\n  if (!parsed.date || !parsed.sites || parsed.sites.length === 0) {\n    throw new Error('日付または現場情報が取得できませんでした');\n  }\n\n  for (const site of parsed.sites) {\n    if (site.startTime && site.endTime) {\n      const [sh, sm] = site.startTime.split(':').map(Number);\n      const [eh, em] = site.endTime.split(':').map(Number);\n      let totalMin = (eh * 60 + em) - (sh * 60 + sm);\n      if (totalMin < 0) totalMin += 24 * 60;\n      totalMin -= (site.breakMin || 0);\n      const h = Math.floor(totalMin / 60);\n      const m = totalMin % 60;\n      site.workingTime = `${h}:${String(m).padStart(2, '0')}`;\n    }\n    site.highwayFee  = parseInt(site.highwayFee)  || 0;\n    site.distance    = parseInt(site.distance)     || 0;\n    site.parkingFee  = parseInt(site.parkingFee)   || 0;\n    site.materialFee = parseInt(site.materialFee)  || 0;\n    site.breakMin    = parseInt(site.breakMin)     || 0;\n  }\n\n  const dateParts = parsed.date.split('/');\n  const fileYear  = parseInt(dateParts[0]);\n  const fileMonth = parseInt(dateParts[1]);\n  const fileName  = `稼働表_${fileYear}年${fileMonth}月.xlsx`;\n\n  return [{ json: { ...data, parsedDate: parsed.date, sites: parsed.sites, valid: true, fileName, fileYear, fileMonth } }];\n\n} catch (e) {\n  return [{ json: {\n    valid: false,\n    replyToken: data.replyToken,\n    errorMessage: `日報の解析に失敗しました。\\n以下を確認してください：\\n・日付が正しいか（例：2026/05/01）\\n・区分が正しいか（昼勤 / 夜勤）`\n  }}];\n}\n"
+      },
+      "name": "Claude解析結果処理",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        600
+      ],
+      "id": "claude_parse"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "解析バリデーション",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        600
+      ],
+      "id": "parse_validation"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/日報/{{ $json.fileName }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "options": {}
+      },
+      "name": "ファイル情報取得",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        500
+      ],
+      "id": "file_info",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "name": "データ合流1",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1980,
+        600
+      ],
+      "id": "merge1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const data = $input.first().json;\n  const downloadUrl = data['@microsoft.graph.downloadUrl'] || data.downloadUrl;\n  const fileId = data.id || data.fileId;\n\n  try {\n    if (!downloadUrl) throw new Error('ダウンロードURLが取得できませんでした');\n    const workbook = new ExcelJS.Workbook();\n    const res = await this.helpers.httpRequest({ method: 'GET', url: downloadUrl, encoding: 'arraybuffer', returnFullResponse: false });\n    await workbook.xlsx.load(Buffer.from(res), { useSharedStrings: false });\n\n    const MULTI_PERSON = ['梶原通信', 'LLS電気', '株式会社トラストテクノス', '株式会社RISE'];\n    const isMulti = MULTI_PERSON.includes(data.employeeName);\n    const sheet = workbook.getWorksheet(data.employeeName);\n    if (!sheet) throw new Error(`シート「${data.employeeName}」が見つかりません`);\n\n    const normalizeKubun = (k) => {\n      if (!k) return '';\n      const s = String(k).trim();\n      if (s === '昼勤' || s === '昼' || s === '日勤') return '昼勤';\n      if (s === '夜勤' || s === '夜') return '夜勤';\n      return s;\n    };\n\n    const normalizeDate = (val) => {\n      if (!val) return '';\n      if (typeof val === 'object' && typeof val.getTime === 'function') {\n        const d = new Date(val.getTime() + 9 * 3600000);\n        return `${d.getUTCFullYear()}/${String(d.getUTCMonth()+1).padStart(2,'0')}/${String(d.getUTCDate()).padStart(2,'0')}`;\n      }\n      if (typeof val === 'number') {\n        const d = new Date(Math.round((val - 25569) * 86400 * 1000) + 9 * 3600000);\n        return `${d.getUTCFullYear()}/${String(d.getUTCMonth()+1).padStart(2,'0')}/${String(d.getUTCDate()).padStart(2,'0')}`;\n      }\n      return String(val).trim();\n    };\n\n    const isDuplicate = (targetDate, targetKubun, targetCompany, targetProperty) => {\n      let found = false;\n      sheet.eachRow((row, num) => {\n        if (num < 3 || found) return;\n        const rowDate    = normalizeDate(row.getCell(1).value);\n        const rowKubun   = normalizeKubun(row.getCell(2).value);\n        const rowCompany = String(row.getCell(3).value || '').trim();\n        const rowProp    = String(row.getCell(4).value || '').trim();\n        if (rowDate === targetDate && rowKubun === targetKubun &&\n            rowCompany === targetCompany && rowProp === targetProperty) {\n          found = true;\n        }\n      });\n      return found;\n    };\n\n    const findNextEmptyRow = () => {\n      let lastRow = sheet.lastRow ? sheet.lastRow.number : 2;\n      for (let i = 3; i <= lastRow + 1; i++) {\n        const row = sheet.getRow(i);\n        const cellA = row.getCell(1).value;\n        if (!cellA || String(cellA).trim() === '') return row;\n      }\n      return sheet.getRow(lastRow + 1);\n    };\n\n    const duplicates = [];\n    let written = false;\n\n    for (const site of data.sites) {\n      const kubun   = normalizeKubun(site.kubun);\n      const company = site.companyName || '';\n      const prop    = site.propertyName || '';\n\n      if (isDuplicate(data.parsedDate, kubun, company, prop)) {\n        duplicates.push(`${company}／${prop}`);\n        continue;\n      }\n\n      const row = findNextEmptyRow();\n      const dateCell = row.getCell(1);\n      dateCell.value = data.parsedDate || '';\n      dateCell.numFmt = '@';\n      row.getCell(2).value = kubun;\n      row.getCell(3).value = company;\n      row.getCell(4).value = prop;\n      row.getCell(5).value = site.startTime   || '';\n      row.getCell(6).value = site.endTime     || '';\n      row.getCell(7).value = site.breakMin    || 0;\n      row.getCell(8).value = site.workingTime || '';\n      row.getCell(9).value = site.workContent || '';\n      if (isMulti) {\n        row.getCell(10).value = site.personnelCount || '';\n        row.getCell(11).value = site.personnelNames || '';\n        row.getCell(12).value = site.highwayFee;\n        row.getCell(13).value = site.distance;\n        row.getCell(14).value = site.parkingFee;\n        row.getCell(15).value = site.materialFee;\n      } else {\n        row.getCell(10).value = site.highwayFee;\n        row.getCell(11).value = site.distance;\n        row.getCell(12).value = site.parkingFee;\n        row.getCell(13).value = site.materialFee;\n      }\n      row.commit();\n      written = true;\n    }\n\n    if (!written) {\n      const msg = `既に送信済みの日報です。\\n${duplicates.join('\\n')}`;\n      return [{ json: { valid: false, replyToken: data.replyToken, errorMessage: msg } }];\n    }\n\n    const out = await workbook.xlsx.writeBuffer({ useSharedStrings: false });\n    const fileName = data.fileName || '稼働表.xlsx';\n    const bin = await this.helpers.prepareBinaryData(\n      Buffer.from(out), fileName,\n      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'\n    );\n    const dupMsg = duplicates.length > 0 ? `\\n（重複のためスキップ：${duplicates.join('、')}）` : '';\n    return [{ json: { ...data, fileId, valid: true, dupMsg }, binary: { data: bin } }];\n\n  } catch (err) {\n    return [{ json: { valid: false, replyToken: data.replyToken, errorMessage: err.message } }];\n  }\n})();\n"
+      },
+      "name": "Excel書き込み",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        600
+      ],
+      "id": "excel_write"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "書き込みバリデーション",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        600
+      ],
+      "id": "write_validation"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/items/{{ $json.fileId }}/content",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "name": "アップロード",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        500
+      ],
+      "id": "upload"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "name": "データ合流2",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        2860,
+        600
+      ],
+      "id": "merge2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst dupMsg = data.dupMsg || '';\nconst msg = `お疲れ様です　日報を確認しました　ありがとうございます。${dupMsg}`;\nreturn [{ json: { replyToken: data.replyToken, replyMessage: msg } }];\n"
+      },
+      "name": "成功返信生成",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        600
+      ],
+      "id": "success_reply_gen"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lineToken = 'Bearer YOUR_LINE_CHANNEL_ACCESS_TOKEN';\nconst data = $input.first().json;\nconst replyToken = data.replyToken;\nconst text = data.replyMessage || data.errorMessage || 'お疲れ様です。';\n\nif (replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken },\n    body: { replyToken, messages: [{ type: 'text', text }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];\n"
+      },
+      "name": "LINE返信（成功）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        600
+      ],
+      "id": "line_reply_success"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lineToken = 'Bearer YOUR_LINE_CHANNEL_ACCESS_TOKEN';\nconst data = $input.first().json;\nconst replyToken = data.replyToken;\nconst text = data.replyMessage || data.errorMessage || 'お疲れ様です。';\n\nif (replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken },\n    body: { replyToken, messages: [{ type: 'text', text }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];\n"
+      },
+      "name": "LINE返信（エラー）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        200
+      ],
+      "id": "line_reply_error"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst normalize = (name) =>\n  (name || '').replace(/株式会社|有限会社|合同会社|一般社団法人|一般財団法人/g, '').trim();\n\nconst BILLING_COMPANIES = [\n  '港振興業', 'トラストテクノス', '平成システム', 'FGE',\n  'mtr', 'オークコミュニケーション', 'ライズ',\n  '千里スカイハイツ管理組合', '菊次', 'ページ', 'G-STYLE', '梶原通信'\n];\n\nconst CLOSING_20 = ['平成システム', '梶原通信'];\n\nconst parts = (data.parsedDate || '').split('/');\nconst year  = parseInt(parts[0]) || 0;\nconst month = parseInt(parts[1]) || 0;\nconst day   = parseInt(parts[2]) || 0;\n\nconst billingSites = (data.sites || []).filter(site => {\n  const normalized = normalize(site.companyName);\n  return BILLING_COMPANIES.some(c => normalized.includes(normalize(c)) || normalize(c).includes(normalized));\n});\n\nif (billingSites.length === 0) {\n  return [{ json: { ...data, hasBilling: false } }];\n}\n\nconst groups = {};\nfor (const site of billingSites) {\n  const norm = normalize(site.companyName);\n  const is20 = CLOSING_20.some(c => norm.includes(normalize(c)) || normalize(c).includes(norm));\n  let bYear = year, bMonth = month;\n  if (is20 && day >= 21) {\n    bMonth = month + 1;\n    if (bMonth > 12) { bMonth = 1; bYear = year + 1; }\n  }\n  const key = `${bYear}-${bMonth}`;\n  if (!groups[key]) groups[key] = { bYear, bMonth, sites: [] };\n  groups[key].sites.push(site);\n}\n\nconst results = [];\nfor (const group of Object.values(groups)) {\n  const billingFileName = `請求集計_${group.bYear}年${String(group.bMonth).padStart(2,'0')}月.xlsx`;\n  results.push({ json: { ...data, year: group.bYear, month: group.bMonth, billingFileName, billingSites: group.sites, hasBilling: true } });\n}\nreturn results;\n"
+      },
+      "name": "請求集計書き込み準備",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        800
+      ],
+      "id": "billing_extract"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.hasBilling }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "請求集計チェック",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        800
+      ],
+      "id": "billing_check"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/請求集計/{{ $json.billingFileName }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "options": {}
+      },
+      "name": "請求集計Excelファイル情報取得",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3080,
+        700
+      ],
+      "id": "billing_file_info",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "name": "請求集計データ合流",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        3300,
+        800
+      ],
+      "id": "billing_merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const data = $input.first().json;\n\n  const normalize = (name) =>\n    (name || '').replace(/株式会社|有限会社|合同会社|一般社団法人|一般財団法人/g, '').trim();\n\n  const wb = new ExcelJS.Workbook();\n  const downloadUrl = data['@microsoft.graph.downloadUrl'] || data.downloadUrl;\n  const fileId = data.id || null;\n\n  if (downloadUrl) {\n    try {\n      const res = await this.helpers.httpRequest({ method: 'GET', url: downloadUrl, encoding: 'arraybuffer', returnFullResponse: false });\n      await wb.xlsx.load(Buffer.from(res), { useSharedStrings: false });\n    } catch(e) {}\n  }\n\n  for (const site of data.billingSites) {\n    const sheetName = normalize(site.companyName);\n    let sheet = wb.getWorksheet(sheetName);\n    if (!sheet) {\n      sheet = wb.addWorksheet(sheetName);\n      const hdr = sheet.getRow(1);\n      hdr.getCell(1).value = '日付'; hdr.getCell(2).value = '区分';\n      hdr.getCell(3).value = '現場名'; hdr.getCell(4).value = '人員名';\n      hdr.getCell(5).value = '高速(円)'; hdr.getCell(6).value = '距離(km)';\n      hdr.getCell(7).value = '駐車場(円)'; hdr.font = { bold: true }; hdr.commit();\n    }\n    let lastRow = 1;\n    sheet.eachRow((row, num) => { lastRow = num; });\n    const newRow = sheet.getRow(lastRow + 1);\n    newRow.getCell(1).value = data.parsedDate;\n    newRow.getCell(2).value = site.kubun || '';\n    newRow.getCell(3).value = site.propertyName || '';\n    newRow.getCell(4).value = data.employeeName || '';\n    newRow.getCell(5).value = site.highwayFee || 0;\n    newRow.getCell(6).value = site.distance || 0;\n    newRow.getCell(7).value = site.parkingFee || 0;\n    newRow.commit();\n  }\n\n  const buf = await wb.xlsx.writeBuffer({ useSharedStrings: false });\n  const bin = await this.helpers.prepareBinaryData(\n    Buffer.from(buf), data.billingFileName,\n    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'\n  );\n  return [{ json: { ...data, billingFileId: fileId }, binary: { data: bin } }];\n})();\n"
+      },
+      "name": "請求集計Excel書き込み",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3520,
+        800
+      ],
+      "id": "billing_excel_write"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/請求集計/{{ $json.billingFileName }}:/content",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "name": "請求集計アップロード",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3740,
+        800
+      ],
+      "id": "billing_upload"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lineToken = 'Bearer YOUR_LINE_CHANNEL_ACCESS_TOKEN';\nconst NOZOE_ID = 'Uc1e1e958fb952752c3d34628a17585a1';\n\nconst data = $input.first().json;\nconst fileName = data.billingFileName || '';\nconst companyNames = (data.billingSites || []).map(s => s.companyName).join('、');\n\nconst msg = fileName\n  ? `請求集計を更新しました\\nファイル: ${fileName}\\n対象会社: ${companyNames}`\n  : '請求集計を更新しました';\n\nawait this.helpers.httpRequest({\n  method: 'POST',\n  url: 'https://api.line.me/v2/bot/message/push',\n  headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n  body: { to: NOZOE_ID, messages: [{ type: 'text', text: msg }] },\n  json: true\n});\n\nreturn [{ json: { done: true } }];\n"
+      },
+      "name": "野添通知",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3960,
+        800
+      ],
+      "id": "nozoe_notify"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst CLOSING_20 = ['平成システム', '梶原通信'];\nconst normalize = (name) => (name || '').replace(/株式会社|有限会社|合同会社/g, '').trim();\nconst normalizedTarget = normalize(d.companyName);\nconst is20 = CLOSING_20.some(c => normalizedTarget.includes(normalize(c)) || normalize(c).includes(normalizedTarget));\n\nconst prevYear = d.month === 1 ? d.year - 1 : d.year;\nconst prevMonth = d.month === 1 ? 12 : d.month - 1;\nconst prevFileName = `稼働表_${prevYear}年${prevMonth}月.xlsx`;\n\nreturn [{ json: { ...d, is20, prevFileName, prevYear, prevMonth } }];\n"
+      },
+      "name": "請求集計準備",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        1000
+      ],
+      "id": "billing_prepare"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/日報/{{ $json.fileName }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "options": {}
+      },
+      "name": "請求集計ファイル情報取得（当月）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        1000
+      ],
+      "id": "billing_current",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "name": "請求集計データ合流（当月）",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1540,
+        1000
+      ],
+      "id": "billing_merge_current"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst current = data['@microsoft.graph.downloadUrl'] || null;\nreturn [{ json: { ...data, currentDownloadUrl: current } }];"
+      },
+      "name": "現当月URL保存",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        1000
+      ],
+      "id": "save_current_url"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.microsoft.com/v1.0/me/drive/root:/業務管理システム/日報/{{ $json.prevFileName }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftDriveOAuth2Api",
+        "options": {}
+      },
+      "name": "請求集計ファイル情報取得（前月）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        900
+      ],
+      "id": "billing_prev",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "name": "請求集計データ合流（前月）",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        2200,
+        1000
+      ],
+      "id": "billing_merge_prev"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst prev = data['@microsoft.graph.downloadUrl'] || null;\nreturn [{ json: { ...data, prevDownloadUrl: prev } }];"
+      },
+      "name": "前月URL保存",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        1000
+      ],
+      "id": "save_prev_url"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ExcelJS = require('exceljs');\nreturn await (async () => {\n  const data = $input.first().json;\n  const currentDownloadUrl = data.currentDownloadUrl;\n  const prevDownloadUrl = data.prevDownloadUrl;\n\n  const MULTI = ['梶原通信','LLS電気','株式会社トラストテクノス','株式会社RISE'];\n  const isMulti = MULTI.includes(data.companyName);\n  const highwayCol = isMulti ? 12 : 10;\n  const distanceCol = isMulti ? 13 : 11;\n\n  let startDate, endDate;\n  if (data.is20) {\n    const pY = data.month === 1 ? data.year - 1 : data.year;\n    const pM = data.month === 1 ? 12 : data.month - 1;\n    startDate = new Date(Date.UTC(pY, pM - 1, 21));\n    endDate = new Date(Date.UTC(data.year, data.month - 1, 20));\n  } else {\n    startDate = new Date(Date.UTC(data.year, data.month - 1, 1));\n    endDate = new Date(Date.UTC(data.year, data.month, 0));\n  }\n\n  const records = {};\n  const processWB = async (downloadUrl) => {\n    if (!downloadUrl) return;\n    const res = await this.helpers.httpRequest({ method: 'GET', url: downloadUrl, encoding: 'arraybuffer', returnFullResponse: false });\n    const wb = new ExcelJS.Workbook();\n    await wb.xlsx.load(Buffer.from(res), { useSharedStrings: false });\n    wb.eachSheet((sheet) => {\n      const empName = sheet.name;\n      sheet.eachRow((row, num) => {\n        if (num < 3) return;\n        const dateCell = row.getCell(1).value;\n        const company = row.getCell(3).value;\n        if (!company || String(company).trim() !== data.companyName) return;\n        let d;\n        if (typeof dateCell === 'object' && typeof dateCell.getTime === 'function') {\n          d = new Date(dateCell.getTime() + 9 * 3600000);\n        } else if (typeof dateCell === 'string') {\n          const parts = dateCell.split('/');\n          if (parts.length !== 3) return;\n          d = new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));\n        } else { return; }\n        const dUTC = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));\n        if (dUTC < startDate || dUTC > endDate) return;\n        const dateStr = `${d.getUTCMonth()+1}/${d.getUTCDate()}`;\n        const shift = row.getCell(2).value || '';\n        const site = row.getCell(4).value || '';\n        const key = `${dUTC.getTime()}|${shift}|${site}`;\n        const hw = row.getCell(highwayCol).value || 0;\n        const dist = row.getCell(distanceCol).value || 0;\n        if (!records[key]) records[key] = { dateStr, shift, site, employees: [], highway: 0, distance: 0, sortKey: dUTC.getTime() };\n        if (!records[key].employees.includes(empName)) records[key].employees.push(empName);\n        records[key].highway = Math.max(records[key].highway, hw);\n        records[key].distance = Math.max(records[key].distance, dist);\n      });\n    });\n  };\n\n  await processWB(currentDownloadUrl);\n  if (data.is20 && prevDownloadUrl) await processWB(prevDownloadUrl);\n\n  const sorted = Object.values(records).sort((a, b) => a.sortKey - b.sortKey);\n  let totalHighway = 0, totalDistance = 0;\n  const lines = sorted.map(r => {\n    totalHighway += r.highway; totalDistance += r.distance;\n    let line = `${r.dateStr}  ${r.shift}  ${r.site}  ${r.employees.join(' ')}`;\n    if (r.highway > 0) line += `  高速:¥${r.highway.toLocaleString('ja-JP')}`;\n    if (r.distance > 0) line += `  距離:${r.distance}km`;\n    return line;\n  });\n\n  const sM = data.is20 ? (data.month === 1 ? 12 : data.month - 1) : data.month;\n  const sD = data.is20 ? 21 : 1;\n  const eM = data.month;\n  const eD = data.is20 ? 20 : new Date(data.year, data.month, 0).getDate();\n  const period = `${sM}/${sD}〜${eM}/${eD}`;\n\n  let msg = `【${data.companyName} 請求集計】\\n期間：${period}\\n\\n`;\n  if (lines.length === 0) { msg += '該当する稼働記録がありません'; }\n  else {\n    msg += lines.join('\\n') + '\\n\\n────────────\\n';\n    msg += `稼働日数：${sorted.length}日`;\n    if (totalHighway > 0) msg += `\\n高速合計：¥${totalHighway.toLocaleString('ja-JP')}`;\n    if (totalDistance > 0) msg += `\\n距離合計：${totalDistance}km`;\n  }\n\n  return [{ json: { replyToken: data.replyToken, replyMessage: msg } }];\n})();\n"
+      },
+      "name": "請求集計処理",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        1000
+      ],
+      "id": "billing_process"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lineToken = 'Bearer YOUR_LINE_CHANNEL_ACCESS_TOKEN';\nconst data = $input.first().json;\nconst replyToken = data.replyToken;\nconst text = data.replyMessage || data.errorMessage || 'お疲れ様です。';\n\nif (replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken },\n    body: { replyToken, messages: [{ type: 'text', text }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];\n"
+      },
+      "name": "LINE返信（請求集計）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        1000
+      ],
+      "id": "line_reply_billing"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Webhook応答",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "LINEメッセージ解析",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LINEメッセージ解析": {
+      "main": [
+        [
+          {
+            "node": "バリデーション確認",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "バリデーション確認": {
+      "main": [
+        [
+          {
+            "node": "メッセージタイプ判定",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "LINE返信（エラー）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "メッセージタイプ判定": {
+      "main": [
+        [
+          {
+            "node": "請求集計準備",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Claude API呼び出し",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude API呼び出し": {
+      "main": [
+        [
+          {
+            "node": "Claude解析結果処理",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude解析結果処理": {
+      "main": [
+        [
+          {
+            "node": "解析バリデーション",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "解析バリデーション": {
+      "main": [
+        [
+          {
+            "node": "ファイル情報取得",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "データ合流1",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "LINE返信（エラー）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ファイル情報取得": {
+      "main": [
+        [
+          {
+            "node": "データ合流1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "データ合流1": {
+      "main": [
+        [
+          {
+            "node": "Excel書き込み",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Excel書き込み": {
+      "main": [
+        [
+          {
+            "node": "書き込みバリデーション",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "書き込みバリデーション": {
+      "main": [
+        [
+          {
+            "node": "アップロード",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "データ合流2",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "請求集計書き込み準備",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "LINE返信（エラー）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "アップロード": {
+      "main": [
+        [
+          {
+            "node": "データ合流2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "データ合流2": {
+      "main": [
+        [
+          {
+            "node": "成功返信生成",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "成功返信生成": {
+      "main": [
+        [
+          {
+            "node": "LINE返信（成功）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計書き込み準備": {
+      "main": [
+        [
+          {
+            "node": "請求集計チェック",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計チェック": {
+      "main": [
+        [
+          {
+            "node": "請求集計Excelファイル情報取得",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "請求集計データ合流",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        []
+      ]
+    },
+    "請求集計Excelファイル情報取得": {
+      "main": [
+        [
+          {
+            "node": "請求集計データ合流",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計データ合流": {
+      "main": [
+        [
+          {
+            "node": "請求集計Excel書き込み",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計Excel書き込み": {
+      "main": [
+        [
+          {
+            "node": "請求集計アップロード",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計アップロード": {
+      "main": [
+        [
+          {
+            "node": "野添通知",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計準備": {
+      "main": [
+        [
+          {
+            "node": "請求集計ファイル情報取得（当月）",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "請求集計データ合流（当月）",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "請求集計ファイル情報取得（当月）": {
+      "main": [
+        [
+          {
+            "node": "請求集計データ合流（当月）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計データ合流（当月）": {
+      "main": [
+        [
+          {
+            "node": "現当月URL保存",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "現当月URL保存": {
+      "main": [
+        [
+          {
+            "node": "請求集計ファイル情報取得（前月）",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "請求集計データ合流（前月）",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "請求集計ファイル情報取得（前月）": {
+      "main": [
+        [
+          {
+            "node": "請求集計データ合流（前月）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計データ合流（前月）": {
+      "main": [
+        [
+          {
+            "node": "前月URL保存",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "前月URL保存": {
+      "main": [
+        [
+          {
+            "node": "請求集計処理",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計処理": {
+      "main": [
+        [
+          {
+            "node": "LINE返信（請求集計）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "tags": []
+}
