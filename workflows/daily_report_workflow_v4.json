@@ -44,38 +44,6 @@
       }
     },
     {
-      "id": "467f2d63",
-      "name": "バリデーション確認",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        660,
-        500
-      ],
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "cond1",
-              "leftValue": "={{ $json.valid }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "equal"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      }
-    },
-    {
       "id": "db415662",
       "name": "LINE返信（バリデーションエラー）",
       "type": "n8n-nodes-base.code",
@@ -111,7 +79,7 @@
               "rightValue": "daily_report",
               "operator": {
                 "type": "string",
-                "operation": "equal"
+                "operation": "equals"
               }
             }
           ],
@@ -659,25 +627,7 @@
       "main": [
         [
           {
-            "node": "バリデーション確認",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "バリデーション確認": {
-      "main": [
-        [
-          {
             "node": "メッセージタイプ判定",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "LINE返信（バリデーションエラー）",
             "type": "main",
             "index": 0
           }
@@ -695,7 +645,7 @@
         ],
         [
           {
-            "node": "請求集計準備",
+            "node": "LINE返信（エラー）",
             "type": "main",
             "index": 0
           }
