@@ -137,7 +137,7 @@
         200
       ],
       "parameters": {
-        "jsCode": "\nconst data = $input.first().json;\nconst siteCount = (data.sites || []).length;\nconst siteList = (data.sites || []).map(s =>\n  `・${s.companyName} ${s.propertyName || ''} ${s.kubun || ''} ${s.startTime || ''}〜${s.endTime || ''} (${s.workHours || ''})`\n).join('\\n');\nconst replyMessage = `✅ 日報を記録しました\\n日付: ${data.parsedDate}\\n担当: ${data.employeeName}\\n現場数: ${siteCount}件\\n${siteList}`.trim();\nreturn [{ json: { ...data, replyMessage } }];\n"
+        "jsCode": "\nconst data = $input.first().json;\nconst siteList = (data.sites || []).map(s =>\n  `・${s.companyName} ${s.propertyName || ''} ${s.kubun || ''} ${s.startTime || ''}〜${s.endTime || ''} (${s.workHours || ''})`\n).join('\\n');\nconst replyMessage = `✅ 日報を記録しました\\n日付: ${data.parsedDate}\\n担当: ${data.employeeName}\\n${siteList}\\nお疲れ様でした`.trim();\nreturn [{ json: { ...data, replyMessage } }];\n"
       }
     },
     {
