@@ -106,19 +106,6 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst lineToken = 'Bearer YOUR_LINE_TOKEN';\nconst data = $input.first().json;\nconst msg = `日報の解析に失敗しました。\\n理由: ${data.reason || '不明なエラー'}\\nもう一度送信してください。`;\nif (data.replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n    body: { replyToken: data.replyToken, messages: [{ type: 'text', text: msg }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];\n"
-      },
-      "id": "4983f880",
-      "name": "LINE返信（エラー）",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1760,
-        608
-      ]
-    },
-    {
-      "parameters": {
         "jsCode": "\nconst data = $input.first().json;\nconst siteList = (data.sites || []).map(s =>\n  `・${s.companyName} ${s.propertyName || ''} ${s.kubun || ''} ${s.startTime || ''}〜${s.endTime || ''} (${s.workHours || ''})`\n).join('\\n');\nconst replyMessage = `✅ 日報を記録しました\\n日付: ${data.parsedDate}\\n担当: ${data.employeeName}\\n${siteList}\\nお疲れ様でした`.trim();\nreturn [{ json: { ...data, replyMessage } }];\n"
       },
       "id": "aaa64dcb",
@@ -378,6 +365,19 @@
         4384,
         608
       ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst data = $input.first().json;\nconst lineToken = 'Bearer YOUR_LINE_TOKEN';\nconst text = data.messageText || '';\n\n// 月の解析\nconst now = new Date();\nlet year = now.getFullYear();\nlet month = now.getMonth() + 1;\n\nif (text.includes('先月')) {\n  month -= 1;\n  if (month === 0) { month = 12; year -= 1; }\n} else if (!text.includes('今月')) {\n  let m = text.match(/(\\d{4})年(\\d{1,2})月/);\n  if (m) { year = parseInt(m[1]); month = parseInt(m[2]); }\n  else {\n    m = text.match(/(\\d{1,2})\\/(\\d{4})/);\n    if (m) { month = parseInt(m[1]); year = parseInt(m[2]); }\n    else {\n      m = text.match(/(\\d{1,2})月/);\n      if (m) month = parseInt(m[1]);\n    }\n  }\n}\n\nconst fileName = `請求集計_${year}年${String(month).padStart(2,'0')}月`;\n\nconst BILLING_COMPANIES = [\n  '港振興業', 'トラストテクノス', '平成システム', 'FGE',\n  'mtr', 'オークコミュニケーション', 'ライズ',\n  '千里スカイハイツ管理組合', '菊次', 'ページ', 'G-STYLE', '梶原通信', 'LLS電気'\n];\n\nlet replyMessage;\n\n// ファイル検索\nconst searchRes = await this.helpers.httpRequestWithAuthentication.call(\n  this, 'googleSheetsOAuth2Api', {\n    method: 'GET',\n    url: 'https://www.googleapis.com/drive/v3/files',\n    qs: {\n      q: `name='${fileName}' and mimeType='application/vnd.google-apps.spreadsheet'`,\n      fields: 'files(id,name)'\n    },\n    json: true\n  });\n\nconst files = searchRes.files || [];\n\nif (files.length === 0) {\n  replyMessage = `${year}年${month}月 請求集計\\n該当ファイルがありません`;\n} else {\n  const ssId = files[0].id;\n  const ranges = BILLING_COMPANIES.map(n => `ranges=${encodeURIComponent(n + '!A:A')}`).join('&');\n  const url = `https://sheets.googleapis.com/v4/spreadsheets/${ssId}/values:batchGet?${ranges}`;\n\n  let batchRes = { valueRanges: [] };\n  try {\n    batchRes = await this.helpers.httpRequestWithAuthentication.call(\n      this, 'googleSheetsOAuth2Api', { method: 'GET', url, json: true });\n  } catch(e) {}\n\n  const has = [];\n  const none = [];\n  (batchRes.valueRanges || []).forEach((vr, i) => {\n    const rows = (vr.values || []).slice(1);\n    if (rows.length > 0) {\n      has.push(`・${BILLING_COMPANIES[i]}（${rows.length}件）`);\n    } else {\n      none.push(BILLING_COMPANIES[i]);\n    }\n  });\n\n  replyMessage = `${year}年${month}月 請求集計\\n` +\n    (has.length > 0 ? has.join('\\n') : '記録なし') +\n    (none.length > 0 ? `\\n\\n該当なし：${none.join('、')}` : '');\n}\n\nif (data.replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n    body: { replyToken: data.replyToken, messages: [{ type: 'text', text: replyMessage }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true, replyMessage } }];\n"
+      },
+      "id": "billing_query",
+      "name": "請求照会処理",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        800
+      ]
     }
   ],
   "pinData": {},
@@ -420,7 +420,7 @@
         ],
         [
           {
-            "node": "LINE返信（エラー）",
+            "node": "請求照会処理",
             "type": "main",
             "index": 0
           }
