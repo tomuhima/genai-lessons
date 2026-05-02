@@ -266,58 +266,6 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst data = $input.first().json;\nconst spreadsheetId = data.billingSpreadsheetId;\nif (!spreadsheetId) throw new Error('請求集計スプレッドシートIDが未設定');\n\nconst normalize = (name) =>\n  (name || '').replace(/株式会社|有限会社|合同会社|一般社団法人|一般財団法人/g, '').trim();\n\nconst results = [];\nfor (const site of (data.billingSites || [])) {\n  const sheetName = normalize(site.companyName);\n  const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}:append`;\n  const staffCount = site.staffCount && site.staffCount > 0 ? site.staffCount : 1;\n  const rowValues = [\n    data.parsedDate,\n    site.kubun || '',\n    site.propertyName || '',\n    data.employeeName,\n    staffCount,\n    site.highwayFee || 0,\n    site.distance || 0,\n    site.parkingFee || 0,\n    site.materialCost || 0\n  ];\n  results.push({ json: {\n    ...data,\n    billingSpreadsheetId: spreadsheetId,\n    billingSheetName: sheetName,\n    appendUrl,\n    requestBody: { values: [rowValues] }\n  }});\n}\nreturn results;\n"
-      },
-      "id": "3e404c22",
-      "name": "請求集計サイト展開",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        4384,
-        608
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $json.appendUrl }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "googleSheetsOAuth2Api",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "valueInputOption",
-              "value": "USER_ENTERED"
-            },
-            {
-              "name": "insertDataOption",
-              "value": "INSERT_ROWS"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
-        "options": {}
-      },
-      "id": "b8199969",
-      "name": "請求集計行追加",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        4592,
-        608
-      ],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "EoASV9OF6Sq9t52P",
-          "name": "Google Sheets account"
-        }
-      }
-    },
-    {
-      "parameters": {
         "jsCode": "\nconst lineToken = 'Bearer YOUR_LINE_TOKEN';\nconst NOZOE_ID = 'Uc1e1e958fb952752c3d34628a17585a1';\nconst data = $input.first().json;\n\nconst companyNames = (data.billingSites || []).map(s => s.companyName).join('、');\nconst msg = data.billingFileName\n  ? `請求集計を更新しました\\nファイル: ${data.billingFileName}\\n担当: ${data.employeeName}\\n対象会社: ${companyNames}`\n  : '請求集計を更新しました';\n\nawait this.helpers.httpRequest({\n  method: 'POST',\n  url: 'https://api.line.me/v2/bot/message/push',\n  headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n  body: { to: NOZOE_ID, messages: [{ type: 'text', text: msg }] },\n  json: true\n});\nreturn [{ json: { done: true } }];\n"
       },
       "id": "772a33de",
@@ -325,7 +273,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4800,
+        4592,
         608
       ]
     },
@@ -416,6 +364,19 @@
       "position": [
         3328,
         400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst data = $input.first().json;\nconst spreadsheetId = data.billingSpreadsheetId;\nif (!spreadsheetId) throw new Error('請求集計スプレッドシートIDが未設定');\n\nconst normalize = (name) =>\n  (name || '').replace(/株式会社|有限会社|合同会社|一般社団法人|一般財団法人/g, '').trim();\n\nconst billingSites = data.billingSites || [];\nif (billingSites.length === 0) return [{ json: { ...data, billingWritten: 0 } }];\n\nlet written = 0;\nfor (const site of billingSites) {\n  const sheetName = normalize(site.companyName);\n  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;\n  const staffCount = site.staffCount && site.staffCount > 0 ? site.staffCount : 1;\n  const rowValues = [\n    data.parsedDate,\n    site.kubun || '',\n    site.propertyName || '',\n    data.employeeName,\n    staffCount,\n    site.highwayFee || 0,\n    site.distance || 0,\n    site.parkingFee || 0,\n    site.materialCost || 0\n  ];\n  await this.helpers.httpRequestWithAuthentication.call(\n    this,\n    'googleSheetsOAuth2Api',\n    { method: 'POST', url, body: { values: [rowValues] }, json: true }\n  );\n  written++;\n}\n\nreturn [{ json: { ...data, billingWritten: written } }];\n"
+      },
+      "id": "write_billing",
+      "name": "請求集計書き込み",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4384,
+        608
       ]
     }
   ],
@@ -613,33 +574,11 @@
         ]
       ]
     },
-    "請求集計サイト展開": {
-      "main": [
-        [
-          {
-            "node": "請求集計行追加",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "請求集計行追加": {
-      "main": [
-        [
-          {
-            "node": "野添通知",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "請求集計ファイル準備": {
       "main": [
         [
           {
-            "node": "請求集計サイト展開",
+            "node": "請求集計書き込み",
             "type": "main",
             "index": 0
           }
@@ -656,6 +595,17 @@
           },
           {
             "node": "請求集計書き込み準備",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計書き込み": {
+      "main": [
+        [
+          {
+            "node": "野添通知",
             "type": "main",
             "index": 0
           }
