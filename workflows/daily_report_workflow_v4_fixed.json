@@ -126,8 +126,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2880,
-        208
+        3552,
+        300
       ]
     },
     {
@@ -139,8 +139,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3104,
-        208
+        3760,
+        300
       ]
     },
     {
@@ -199,71 +199,6 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst data = $input.first().json;\nconst spreadsheetId = data.spreadsheetId;\nif (!spreadsheetId) throw new Error(`スプレッドシートIDが取得できません: ${data.fileName}`);\n\nconst MULTI_PERSON = ['梶原通信', 'LLS電気', '株式会社トラストテクノス', '株式会社RISE'];\nconst isMulti = MULTI_PERSON.includes(data.employeeName);\n\nconst results = [];\nfor (const site of (data.sites || [])) {\n  const row = {\n    spreadsheetId,\n    employeeName: data.employeeName,\n    replyToken: data.replyToken,\n    parsedDate: data.parsedDate,\n    fileName: data.fileName,\n    sites: data.sites,\n    '日付': data.parsedDate,\n    '区分': site.kubun || '',\n    '会社名': site.companyName || '',\n    '物件名': site.propertyName || '',\n    '開始時刻': site.startTime || '',\n    '終了時刻': site.endTime || '',\n    '休憩(分)': site.breakMinutes || 0,\n    '稼働時間': site.workHours || '',\n    '作業内容': site.workContent || '',\n    '高速料金': site.highwayFee || 0,\n    '距離(km)': site.distance || 0,\n    '駐車場': site.parkingFee || 0,\n    '資材費': site.materialCost || 0\n  };\n  if (isMulti) {\n    row['人員数'] = site.staffCount || 0;\n    row['人員名'] = site.staffNames || '';\n  }\n  results.push({ json: row });\n}\nif (results.length === 0) throw new Error('書き込むデータがありません');\nreturn results;\n"
-      },
-      "id": "af36acf0",
-      "name": "サイト展開",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        3328,
-        400
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "\nconst data = $input.first().json;\nconst spreadsheetId = data.spreadsheetId;\nconst sheetName = data.employeeName;\nconst appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}:append`;\n\nconst MULTI_PERSON = ['梶原通信', 'LLS電気', '株式会社トラストテクノス', '株式会社RISE'];\nconst isMulti = MULTI_PERSON.includes(sheetName);\n\nconst rowValues = isMulti ? [\n  data['日付'], data['区分'], data['会社名'], data['物件名'],\n  data['開始時刻'], data['終了時刻'], data['休憩(分)'], data['稼働時間'],\n  data['作業内容'], data['人員数'], data['人員名'],\n  data['高速料金'], data['距離(km)'], data['駐車場'], data['資材費']\n] : [\n  data['日付'], data['区分'], data['会社名'], data['物件名'],\n  data['開始時刻'], data['終了時刻'], data['休憩(分)'], data['稼働時間'],\n  data['作業内容'], data['高速料金'], data['距離(km)'], data['駐車場'], data['資材費']\n];\n\nreturn [{ json: { ...data, appendUrl, requestBody: { values: [rowValues] } } }];\n"
-      },
-      "id": "8dc5ac58",
-      "name": "行追加準備",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        3552,
-        400
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $json.appendUrl }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "googleSheetsOAuth2Api",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "valueInputOption",
-              "value": "USER_ENTERED"
-            },
-            {
-              "name": "insertDataOption",
-              "value": "INSERT_ROWS"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
-        "options": {}
-      },
-      "id": "7b06f31e",
-      "name": "Google Sheets行追加",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        3760,
-        400
-      ],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "EoASV9OF6Sq9t52P",
-          "name": "Google Sheets account"
-        }
-      }
-    },
-    {
-      "parameters": {
         "jsCode": "\nconst data = $input.first().json;\n\nconst normalize = (name) =>\n  (name || '').replace(/株式会社|有限会社|合同会社|一般社団法人|一般財団法人/g, '').trim();\n\nconst BILLING_COMPANIES = [\n  '港振興業', 'トラストテクノス', '平成システム', 'FGE',\n  'mtr', 'オークコミュニケーション', 'ライズ',\n  '千里スカイハイツ管理組合', '菊次', 'ページ', 'G-STYLE', '梶原通信'\n];\nconst CLOSING_20 = ['平成システム'];\nconst COMPANY_ALIASES = {\n  '平成': '平成システム', 'トラスト': 'トラストテクノス',\n  'オーク': 'オークコミュニケーション', '千里': '千里スカイハイツ管理組合',\n  '港': '港振興業', '港振': '港振興業', 'コウシン': '港振興業',\n  '梶原': '梶原通信', 'ジースタイル': 'G-STYLE', 'Gスタイル': 'G-STYLE'\n};\n\nconst resolveAlias = (name) => {\n  for (const [alias, full] of Object.entries(COMPANY_ALIASES)) {\n    if (normalize(name).includes(normalize(alias))) return full;\n  }\n  return name;\n};\n\nconst parts = (data.parsedDate || '').split('/');\nconst year  = parseInt(parts[0]) || 0;\nconst month = parseInt(parts[1]) || 0;\nconst day   = parseInt(parts[2]) || 0;\n\nconst billingSites = (data.sites || []).filter(site => {\n  const resolved = resolveAlias(site.companyName);\n  const norm = normalize(resolved);\n  return BILLING_COMPANIES.some(c => norm.includes(normalize(c)) || normalize(c).includes(norm));\n});\n\nif (billingSites.length === 0) return [];\n\nconst groups = {};\nfor (const site of billingSites) {\n  const resolved = resolveAlias(site.companyName);\n  const norm = normalize(resolved);\n  const is20 = CLOSING_20.some(c => norm.includes(normalize(c)) || normalize(c).includes(norm));\n  let bYear = year, bMonth = month;\n  if (is20 && day >= 21) {\n    bMonth = month + 1;\n    if (bMonth > 12) { bMonth = 1; bYear = year + 1; }\n  }\n  const key = `${bYear}-${bMonth}`;\n  if (!groups[key]) groups[key] = { bYear, bMonth, sites: [] };\n  groups[key].sites.push({ ...site, companyName: resolved });\n}\n\nconst results = [];\nfor (const group of Object.values(groups)) {\n  const billingFileName = `請求集計_${group.bYear}年${String(group.bMonth).padStart(2,'0')}月`;\n  results.push({ json: { ...data, billingYear: group.bYear, billingMonth: group.bMonth, billingFileName, billingSites: group.sites } });\n}\nreturn results;\n"
       },
       "id": "709ca69c",
@@ -271,7 +206,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3328,
+        3552,
         608
       ]
     },
@@ -304,7 +239,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3552,
+        3760,
         608
       ],
       "credentials": {
@@ -325,7 +260,7 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
       "position": [
-        3760,
+        3968,
         608
       ]
     },
@@ -338,7 +273,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4192,
+        4384,
         608
       ]
     },
@@ -371,7 +306,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        4400,
+        4592,
         608
       ],
       "credentials": {
@@ -390,7 +325,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4608,
+        4800,
         608
       ]
     },
@@ -466,8 +401,21 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3968,
-        500
+        4176,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst data = $input.first().json;\nconst spreadsheetId = data.spreadsheetId;\nconst sheetName = data.employeeName;\nif (!spreadsheetId) throw new Error('稼働表スプレッドシートIDが未設定');\nif (!sheetName) throw new Error('シート名（employeeName）が未設定');\n\nconst MULTI_PERSON = ['梶原通信', 'LLS電気', '株式会社トラストテクノス', '株式会社RISE'];\nconst isMulti = MULTI_PERSON.includes(sheetName);\n\nconst sites = data.sites || [];\nif (sites.length === 0) throw new Error('書き込むデータがありません');\n\nconst url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;\n\nconst writtenRows = [];\nfor (const site of sites) {\n  const staffCount = site.staffCount && site.staffCount > 0 ? site.staffCount : 1;\n  const rowValues = isMulti ? [\n    data.parsedDate,\n    site.kubun || '',\n    site.companyName || '',\n    site.propertyName || '',\n    site.startTime || '',\n    site.endTime || '',\n    site.breakMinutes || 0,\n    site.workHours || '',\n    site.workContent || '',\n    staffCount,\n    site.staffNames || '',\n    site.highwayFee || 0,\n    site.distance || 0,\n    site.parkingFee || 0,\n    site.materialCost || 0\n  ] : [\n    data.parsedDate,\n    site.kubun || '',\n    site.companyName || '',\n    site.propertyName || '',\n    site.startTime || '',\n    site.endTime || '',\n    site.breakMinutes || 0,\n    site.workHours || '',\n    site.workContent || '',\n    site.highwayFee || 0,\n    site.distance || 0,\n    site.parkingFee || 0,\n    site.materialCost || 0\n  ];\n  await this.helpers.httpRequestWithAuthentication.call(\n    this,\n    'googleSheetsOAuth2Api',\n    { method: 'POST', url, body: { values: [rowValues] }, json: true }\n  );\n  writtenRows.push(rowValues);\n}\n\nreturn [{ json: { ...data, writtenRows, writeSuccess: true } }];\n"
+      },
+      "id": "write_sheet",
+      "name": "稼働表書き込み",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3328,
+        400
       ]
     }
   ],
@@ -609,45 +557,7 @@
       "main": [
         [
           {
-            "node": "サイト展開",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "請求集計書き込み準備",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "サイト展開": {
-      "main": [
-        [
-          {
-            "node": "行追加準備",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "行追加準備": {
-      "main": [
-        [
-          {
-            "node": "Google Sheets行追加",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Google Sheets行追加": {
-      "main": [
-        [
-          {
-            "node": "成功返信生成",
+            "node": "稼働表書き込み",
             "type": "main",
             "index": 0
           }
@@ -730,6 +640,22 @@
         [
           {
             "node": "請求集計サイト展開",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "稼働表書き込み": {
+      "main": [
+        [
+          {
+            "node": "成功返信生成",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "請求集計書き込み準備",
             "type": "main",
             "index": 0
           }
