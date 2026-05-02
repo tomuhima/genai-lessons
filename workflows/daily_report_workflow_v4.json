@@ -137,7 +137,7 @@
         200
       ],
       "parameters": {
-        "jsCode": "\nconst data = $input.first().json;\nconst siteCount = (data.sites || []).length;\nconst siteList = (data.sites || []).map(s => `・${s.companyName} ${s.propertyName || ''}`).join('\\n');\nconst replyMessage = `日報を記録しました✓\\n日付: ${data.parsedDate}\\n担当: ${data.employeeName}\\n現場数: ${siteCount}件\\n${siteList}`.trim();\nreturn [{ json: { ...data, replyMessage } }];\n"
+        "jsCode": "\nconst data = $input.first().json;\nconst siteCount = (data.sites || []).length;\nconst siteList = (data.sites || []).map(s =>\n  `・${s.companyName} ${s.propertyName || ''} ${s.kubun || ''} ${s.startTime || ''}〜${s.endTime || ''} (${s.workHours || ''})`\n).join('\\n');\nconst replyMessage = `✅ 日報を記録しました\\n日付: ${data.parsedDate}\\n担当: ${data.employeeName}\\n現場数: ${siteCount}件\\n${siteList}`.trim();\nreturn [{ json: { ...data, replyMessage } }];\n"
       }
     },
     {
@@ -272,39 +272,7 @@
         600
       ],
       "parameters": {
-        "jsCode": "\nconst data = $input.first().json;\n\nconst normalize = (name) =>\n  (name || '').replace(/株式会社|有限会社|合同会社|一般社団法人|一般財団法人/g, '').trim();\n\nconst BILLING_COMPANIES = [\n  '港振興業', 'トラストテクノス', '平成システム', 'FGE',\n  'mtr', 'オークコミュニケーション', 'ライズ',\n  '千里スカイハイツ管理組合', '菊次', 'ページ', 'G-STYLE', '梶原通信'\n];\nconst CLOSING_20 = ['平成システム', '梶原通信'];\nconst COMPANY_ALIASES = {\n  '平成': '平成システム', 'トラスト': 'トラストテクノス',\n  'オーク': 'オークコミュニケーション', '千里': '千里スカイハイツ管理組合',\n  '港': '港振興業', '港振': '港振興業', 'コウシン': '港振興業',\n  '梶原': '梶原通信', 'ジースタイル': 'G-STYLE', 'Gスタイル': 'G-STYLE'\n};\n\nconst resolveAlias = (name) => {\n  for (const [alias, full] of Object.entries(COMPANY_ALIASES)) {\n    if (normalize(name).includes(normalize(alias))) return full;\n  }\n  return name;\n};\n\nconst parts = (data.parsedDate || '').split('/');\nconst year  = parseInt(parts[0]) || 0;\nconst month = parseInt(parts[1]) || 0;\nconst day   = parseInt(parts[2]) || 0;\n\nconst billingSites = (data.sites || []).filter(site => {\n  const resolved = resolveAlias(site.companyName);\n  const norm = normalize(resolved);\n  return BILLING_COMPANIES.some(c => norm.includes(normalize(c)) || normalize(c).includes(norm));\n});\n\nif (billingSites.length === 0) {\n  return [{ json: { ...data, hasBilling: false } }];\n}\n\nconst groups = {};\nfor (const site of billingSites) {\n  const resolved = resolveAlias(site.companyName);\n  const norm = normalize(resolved);\n  const is20 = CLOSING_20.some(c => norm.includes(normalize(c)) || normalize(c).includes(norm));\n  let bYear = year, bMonth = month;\n  if (is20 && day >= 21) {\n    bMonth = month + 1;\n    if (bMonth > 12) { bMonth = 1; bYear = year + 1; }\n  }\n  const key = `${bYear}-${bMonth}`;\n  if (!groups[key]) groups[key] = { bYear, bMonth, sites: [] };\n  groups[key].sites.push({ ...site, companyName: resolved });\n}\n\nconst results = [];\nfor (const group of Object.values(groups)) {\n  const billingFileName = `請求集計_${group.bYear}年${String(group.bMonth).padStart(2,'0')}月`;\n  results.push({ json: { ...data, billingYear: group.bYear, billingMonth: group.bMonth, billingFileName, billingSites: group.sites, hasBilling: true } });\n}\nreturn results;\n"
-      }
-    },
-    {
-      "id": "d3f2d3d5",
-      "name": "請求集計チェック",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        2420,
-        600
-      ],
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "cond_billing",
-              "leftValue": "={{ $json.hasBilling }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "equal"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
+        "jsCode": "\nconst data = $input.first().json;\n\nconst normalize = (name) =>\n  (name || '').replace(/株式会社|有限会社|合同会社|一般社団法人|一般財団法人/g, '').trim();\n\nconst BILLING_COMPANIES = [\n  '港振興業', 'トラストテクノス', '平成システム', 'FGE',\n  'mtr', 'オークコミュニケーション', 'ライズ',\n  '千里スカイハイツ管理組合', '菊次', 'ページ', 'G-STYLE', '梶原通信'\n];\nconst CLOSING_20 = ['平成システム', '梶原通信'];\nconst COMPANY_ALIASES = {\n  '平成': '平成システム', 'トラスト': 'トラストテクノス',\n  'オーク': 'オークコミュニケーション', '千里': '千里スカイハイツ管理組合',\n  '港': '港振興業', '港振': '港振興業', 'コウシン': '港振興業',\n  '梶原': '梶原通信', 'ジースタイル': 'G-STYLE', 'Gスタイル': 'G-STYLE'\n};\n\nconst resolveAlias = (name) => {\n  for (const [alias, full] of Object.entries(COMPANY_ALIASES)) {\n    if (normalize(name).includes(normalize(alias))) return full;\n  }\n  return name;\n};\n\nconst parts = (data.parsedDate || '').split('/');\nconst year  = parseInt(parts[0]) || 0;\nconst month = parseInt(parts[1]) || 0;\nconst day   = parseInt(parts[2]) || 0;\n\nconst billingSites = (data.sites || []).filter(site => {\n  const resolved = resolveAlias(site.companyName);\n  const norm = normalize(resolved);\n  return BILLING_COMPANIES.some(c => norm.includes(normalize(c)) || normalize(c).includes(norm));\n});\n\n// 請求対象なし → [] を返してこの分岐を停止（Ifノード不要）\nif (billingSites.length === 0) return [];\n\nconst groups = {};\nfor (const site of billingSites) {\n  const resolved = resolveAlias(site.companyName);\n  const norm = normalize(resolved);\n  const is20 = CLOSING_20.some(c => norm.includes(normalize(c)) || normalize(c).includes(norm));\n  let bYear = year, bMonth = month;\n  if (is20 && day >= 21) {\n    bMonth = month + 1;\n    if (bMonth > 12) { bMonth = 1; bYear = year + 1; }\n  }\n  const key = `${bYear}-${bMonth}`;\n  if (!groups[key]) groups[key] = { bYear, bMonth, sites: [] };\n  groups[key].sites.push({ ...site, companyName: resolved });\n}\n\nconst results = [];\nfor (const group of Object.values(groups)) {\n  const billingFileName = `請求集計_${group.bYear}年${String(group.bMonth).padStart(2,'0')}月`;\n  results.push({ json: { ...data, billingYear: group.bYear, billingMonth: group.bMonth, billingFileName, billingSites: group.sites } });\n}\nreturn results;\n"
       }
     },
     {
@@ -820,17 +788,6 @@
       ]
     },
     "請求集計書き込み準備": {
-      "main": [
-        [
-          {
-            "node": "請求集計チェック",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "請求集計チェック": {
       "main": [
         [
           {
