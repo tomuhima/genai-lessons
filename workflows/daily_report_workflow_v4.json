@@ -682,11 +682,6 @@
       "main": [
         [
           {
-            "node": "成功返信生成",
-            "type": "main",
-            "index": 0
-          },
-          {
             "node": "スプレッドシート検索",
             "type": "main",
             "index": 0
@@ -929,6 +924,17 @@
         [
           {
             "node": "LINE返信（請求集計）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets行追加": {
+      "main": [
+        [
+          {
+            "node": "成功返信生成",
             "type": "main",
             "index": 0
           }
