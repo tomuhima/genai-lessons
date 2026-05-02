@@ -266,7 +266,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst data = $input.first().json;\nconst spreadsheetId = (data.files || [])[0]?.id;\nif (!spreadsheetId) throw new Error(`スプレッドシートが見つかりません: ${data.fileName}`);\nconst sheetName = data.employeeName;\nconst readUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A:A`;\nreturn [{ json: { ...data, spreadsheetId, readUrl } }];\n"
+        "jsCode": "\nconst data = $input.first().json;\nconst spreadsheetId = (data.files || [])[0]?.id;\nif (!spreadsheetId) throw new Error(`スプレッドシートが見つかりません: ${data.fileName}`);\nconst sheetName = data.employeeName;\nconst readUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A:D`;\nreturn [{ json: { ...data, spreadsheetId, readUrl } }];\n"
       },
       "id": "dup_url_prep",
       "name": "重複確認URL準備",
@@ -316,7 +316,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst data = $input.first().json;\nconst existingValues = data.values || [];\nconst parsedDate = data.parsedDate;\nconst lineToken = 'Bearer YOUR_LINE_TOKEN';\n\nconst dataRows = existingValues.slice(2);\nconst normalize = (d) => (d || '').toString().replace(/[\\-\\.]/g, '/').trim();\nconst isDuplicate = dataRows.some(row => normalize(row[0]) === normalize(parsedDate));\n\nif (isDuplicate) {\n  if (data.replyToken) {\n    try {\n      await this.helpers.httpRequest({\n        method: 'POST',\n        url: 'https://api.line.me/v2/bot/message/reply',\n        headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n        body: { replyToken: data.replyToken, messages: [{ type: 'text', text: `${parsedDate}の日報はすでに送信済みです。\\n重複データは記録されませんでした。` }] },\n        json: true\n      });\n    } catch(e) {}\n  }\n  throw new Error(`重複: ${parsedDate}の日報は送信済み`);\n}\n\nreturn [{ json: { ...data } }];\n"
+        "jsCode": "\nconst data = $input.first().json;\nconst existingValues = data.values || [];\nconst lineToken = 'Bearer YOUR_LINE_TOKEN';\n\nconst dataRows = existingValues.slice(2);\nconst norm = (s) => (s || '').toString().replace(/[\\-\\.]/g, '/').replace(/\\s+/g, '').trim();\n\nconst existingKeys = new Set(\n  dataRows.map(r => `${norm(r[0])}|${norm(r[2])}|${norm(r[3])}`)\n);\n\nconst sites = data.sites || [];\nconst dups = [];\nfor (const site of sites) {\n  const key = `${norm(data.parsedDate)}|${norm(site.companyName)}|${norm(site.propertyName)}`;\n  if (existingKeys.has(key)) {\n    dups.push(`${data.parsedDate} ${site.companyName} ${site.propertyName || ''}`);\n  }\n}\n\nif (dups.length > 0) {\n  if (data.replyToken) {\n    try {\n      await this.helpers.httpRequest({\n        method: 'POST',\n        url: 'https://api.line.me/v2/bot/message/reply',\n        headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n        body: { replyToken: data.replyToken, messages: [{ type: 'text', text:\n          `以下の日報はすでに送信済みです。\\n${dups.map(d => '・' + d).join('\\n')}\\n重複データは記録されませんでした。` }] },\n        json: true\n      });\n    } catch(e) {}\n  }\n  throw new Error(`重複: ${dups.join(' / ')}`);\n}\n\nreturn [{ json: { ...data } }];\n"
       },
       "id": "dup_check",
       "name": "重複チェック",
