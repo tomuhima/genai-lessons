@@ -1,0 +1,990 @@
+{
+  "name": "日報システム v4 (Google Sheets)",
+  "nodes": [
+    {
+      "id": "caed4a49",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        220,
+        400
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "daily-report",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "9123ec27",
+      "name": "Webhook応答",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        440,
+        200
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK"
+      }
+    },
+    {
+      "id": "a88072f4",
+      "name": "LINEメッセージ解析",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        500
+      ],
+      "parameters": {
+        "jsCode": "\nconst body = $input.first().json.body;\nconst events = body?.events || [];\nif (events.length === 0) return [{ json: { valid: false, reason: 'No events' } }];\nconst event = events[0];\nconst userId = event.source?.userId || '';\nconst replyToken = event.message?.type === 'text' ? event.replyToken : '';\nconst messageText = event.message?.text || '';\n\nconst EMPLOYEE_MAP = {\n  \"Uc1e1e958fb952752c3d34628a17585a1\": \"野添優\",\n  \"Uf662ab811bee1780522da7356c0efb9e\": \"丸田翔吾\",\n  \"Ua9a65f01bf77adcc825b05811950480d\": \"源地健史\",\n  \"U65929805c0527b9f75b5276fc250c304\": \"服部秀一\",\n  \"Uadfb98160637cc7f96bccb051c4a51f9\": \"梶原通信\",\n  \"Uf97fd2e35007f697094a9520e1baeafd\": \"井本貴士\",\n  \"REPLACE_LLS_USERID\":               \"LLS電気\",\n  \"REPLACE_TRUST_USERID\":             \"株式会社トラストテクノス\",\n  \"REPLACE_RISE_USERID\":              \"株式会社RISE\"\n};\n\nconst employeeName = EMPLOYEE_MAP[userId];\nif (!employeeName) return [{ json: { valid: false, reason: '未登録ユーザー', userId, replyToken } }];\n\nconst msgLower = messageText.toLowerCase();\nconst messageType = (msgLower.includes('請求') || msgLower.includes('集計')) ? 'billing_query' : 'daily_report';\n\nreturn [{ json: { valid: true, userId, employeeName, messageText, replyToken, messageType } }];\n"
+      }
+    },
+    {
+      "id": "467f2d63",
+      "name": "バリデーション確認",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        500
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "db415662",
+      "name": "LINE返信（バリデーションエラー）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        700
+      ],
+      "parameters": {
+        "jsCode": "\nconst lineToken = 'Bearer YOUR_LINE_CHANNEL_ACCESS_TOKEN';\nconst data = $input.first().json;\nconst msg = `日報の解析に失敗しました。\\n理由: ${data.reason || '不明なエラー'}\\nもう一度送信してください。`;\nif (data.replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n    body: { replyToken: data.replyToken, messages: [{ type: 'text', text: msg }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];\n"
+      }
+    },
+    {
+      "id": "7567addf",
+      "name": "メッセージタイプ判定",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        880,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond2",
+              "leftValue": "={{ $json.messageType }}",
+              "rightValue": "daily_report",
+              "operator": {
+                "type": "string",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "9a7e92ef",
+      "name": "Claude API呼び出し",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        400
+      ],
+      "parameters": {
+        "jsCode": "\nconst data = $input.first().json;\nconst apiKey = 'YOUR_ANTHROPIC_API_KEY';\n\nconst systemPrompt = `あなたは日報解析AIです。以下のJSON形式で出力してください。\n{\n  \"date\": \"YYYY/MM/DD\",\n  \"sites\": [\n    {\n      \"companyName\": \"会社名\",\n      \"propertyName\": \"物件名\",\n      \"kubun\": \"昼勤 or 夜勤\",\n      \"startTime\": \"HH:MM\",\n      \"endTime\": \"HH:MM\",\n      \"breakMinutes\": 60,\n      \"workHours\": \"H:MM\",\n      \"workContent\": \"作業内容\",\n      \"highwayFee\": 0,\n      \"distance\": 0,\n      \"parkingFee\": 0,\n      \"materialCost\": 0,\n      \"staffCount\": null,\n      \"staffNames\": null\n    }\n  ]\n}\nstaffCount/staffNamesはMULTI_PERSON会社のみ使用。`;\n\nconst response = await this.helpers.httpRequest({\n  method: 'POST',\n  url: 'https://api.anthropic.com/v1/messages',\n  headers: {\n    'x-api-key': apiKey,\n    'anthropic-version': '2023-06-01',\n    'content-type': 'application/json'\n  },\n  body: {\n    model: 'claude-haiku-4-5-20251001',\n    max_tokens: 1024,\n    system: systemPrompt,\n    messages: [{ role: 'user', content: data.messageText }]\n  },\n  json: true\n});\n\nconst claudeResponse = response.content?.[0]?.text || '';\nreturn [{ json: { ...data, claudeResponse } }];\n"
+      }
+    },
+    {
+      "id": "09247962",
+      "name": "Claude解析結果処理",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        400
+      ],
+      "parameters": {
+        "jsCode": "\nconst data = $input.first().json;\nconst claudeText = data.claudeResponse || '';\n\nlet parsed;\ntry {\n  const match = claudeText.match(/\\{[\\s\\S]*\\}/);\n  if (!match) throw new Error('JSONが見つかりません');\n  parsed = JSON.parse(match[0]);\n} catch(e) {\n  return [{ json: { ...data, valid: false, reason: 'Claude解析失敗: ' + e.message } }];\n}\n\nif (!parsed.date || !parsed.sites || parsed.sites.length === 0) {\n  return [{ json: { ...data, valid: false, reason: '日付または現場情報が不足しています' } }];\n}\n\nconst dateParts = parsed.date.split('/');\nconst fileYear  = parseInt(dateParts[0]);\nconst fileMonth = parseInt(dateParts[1]);\nconst fileName  = `稼働表_${fileYear}年${String(fileMonth).padStart(2,'0')}月`;\n\nreturn [{ json: { ...data, parsedDate: parsed.date, sites: parsed.sites, valid: true, fileName, fileYear, fileMonth } }];\n"
+      }
+    },
+    {
+      "id": "9d02eb09",
+      "name": "解析バリデーション",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond3",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4983f880",
+      "name": "LINE返信（エラー）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        600
+      ],
+      "parameters": {
+        "jsCode": "\nconst lineToken = 'Bearer YOUR_LINE_CHANNEL_ACCESS_TOKEN';\nconst data = $input.first().json;\nconst msg = `日報の解析に失敗しました。\\n理由: ${data.reason || '不明なエラー'}\\nもう一度送信してください。`;\nif (data.replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n    body: { replyToken: data.replyToken, messages: [{ type: 'text', text: msg }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];\n"
+      }
+    },
+    {
+      "id": "aaa64dcb",
+      "name": "成功返信生成",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        200
+      ],
+      "parameters": {
+        "jsCode": "\nconst data = $input.first().json;\nconst siteCount = (data.sites || []).length;\nconst siteList = (data.sites || []).map(s => `・${s.companyName} ${s.propertyName || ''}`).join('\\n');\nconst replyMessage = `日報を記録しました✓\\n日付: ${data.parsedDate}\\n担当: ${data.employeeName}\\n現場数: ${siteCount}件\\n${siteList}`.trim();\nreturn [{ json: { ...data, replyMessage } }];\n"
+      }
+    },
+    {
+      "id": "38aab03f",
+      "name": "LINE返信（成功）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        200
+      ],
+      "parameters": {
+        "jsCode": "\nconst lineToken = 'Bearer YOUR_LINE_CHANNEL_ACCESS_TOKEN';\nconst data = $input.first().json;\nif (data.replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n    body: { replyToken: data.replyToken, messages: [{ type: 'text', text: data.replyMessage }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];\n"
+      }
+    },
+    {
+      "id": "b5cb4023",
+      "name": "スプレッドシート検索",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        400
+      ],
+      "parameters": {
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "=name='{{ $json.fileName }}' and mimeType='application/vnd.google-apps.spreadsheet'"
+            },
+            {
+              "name": "spaces",
+              "value": "drive"
+            },
+            {
+              "name": "fields",
+              "value": "files(id,name)"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "31bd6466",
+      "name": "データ合流",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1980,
+        400
+      ],
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      }
+    },
+    {
+      "id": "af36acf0",
+      "name": "サイト展開",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        400
+      ],
+      "parameters": {
+        "jsCode": "\nconst data = $input.first().json;\nconst files = data.files || [];\nconst spreadsheetId = files.length > 0 ? files[0].id : null;\nif (!spreadsheetId) throw new Error(`スプレッドシートが見つかりません: ${data.fileName}`);\n\nconst MULTI_PERSON = ['梶原通信', 'LLS電気', '株式会社トラストテクノス', '株式会社RISE'];\nconst isMulti = MULTI_PERSON.includes(data.employeeName);\n\nconst results = [];\nfor (const site of (data.sites || [])) {\n  const row = {\n    spreadsheetId,\n    employeeName: data.employeeName,\n    replyToken: data.replyToken,\n    parsedDate: data.parsedDate,\n    fileName: data.fileName,\n    hasBilling: data.hasBilling || false,\n    billingSites: data.billingSites || [],\n    billingFileName: data.billingFileName || '',\n    '日付': data.parsedDate,\n    '区分': site.kubun || '',\n    '会社名': site.companyName || '',\n    '物件名': site.propertyName || '',\n    '開始時刻': site.startTime || '',\n    '終了時刻': site.endTime || '',\n    '休憩(分)': site.breakMinutes || 0,\n    '稼働時間': site.workHours || '',\n    '作業内容': site.workContent || '',\n    '高速料金': site.highwayFee || 0,\n    '距離(km)': site.distance || 0,\n    '駐車場': site.parkingFee || 0,\n    '資材費': site.materialCost || 0\n  };\n  if (isMulti) {\n    row['人員数'] = site.staffCount || 0;\n    row['人員名'] = site.staffNames || '';\n  }\n  results.push({ json: row });\n}\nif (results.length === 0) throw new Error('書き込むデータがありません');\nreturn results;\n"
+      }
+    },
+    {
+      "id": "8dc5ac58",
+      "name": "行追加準備",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        400
+      ],
+      "parameters": {
+        "jsCode": "\nconst data = $input.first().json;\nconst spreadsheetId = data.spreadsheetId;\nconst sheetName = data.employeeName;\nconst appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}:append`;\n\nconst MULTI_PERSON = ['梶原通信', 'LLS電気', '株式会社トラストテクノス', '株式会社RISE'];\nconst isMulti = MULTI_PERSON.includes(sheetName);\n\nconst rowValues = isMulti ? [\n  data['日付'], data['区分'], data['会社名'], data['物件名'],\n  data['開始時刻'], data['終了時刻'], data['休憩(分)'], data['稼働時間'],\n  data['作業内容'], data['人員数'], data['人員名'],\n  data['高速料金'], data['距離(km)'], data['駐車場'], data['資材費']\n] : [\n  data['日付'], data['区分'], data['会社名'], data['物件名'],\n  data['開始時刻'], data['終了時刻'], data['休憩(分)'], data['稼働時間'],\n  data['作業内容'], data['高速料金'], data['距離(km)'], data['駐車場'], data['資材費']\n];\n\nreturn [{ json: { ...data, appendUrl, requestBody: { values: [rowValues] } } }];\n"
+      }
+    },
+    {
+      "id": "7b06f31e",
+      "name": "Google Sheets行追加",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        400
+      ],
+      "parameters": {
+        "url": "={{ $json.appendUrl }}",
+        "method": "POST",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "USER_ENTERED"
+            },
+            {
+              "name": "insertDataOption",
+              "value": "INSERT_ROWS"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "709ca69c",
+      "name": "請求集計書き込み準備",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        600
+      ],
+      "parameters": {
+        "jsCode": "\nconst data = $input.first().json;\n\nconst normalize = (name) =>\n  (name || '').replace(/株式会社|有限会社|合同会社|一般社団法人|一般財団法人/g, '').trim();\n\nconst BILLING_COMPANIES = [\n  '港振興業', 'トラストテクノス', '平成システム', 'FGE',\n  'mtr', 'オークコミュニケーション', 'ライズ',\n  '千里スカイハイツ管理組合', '菊次', 'ページ', 'G-STYLE', '梶原通信'\n];\nconst CLOSING_20 = ['平成システム', '梶原通信'];\nconst COMPANY_ALIASES = {\n  '平成': '平成システム', 'トラスト': 'トラストテクノス',\n  'オーク': 'オークコミュニケーション', '千里': '千里スカイハイツ管理組合',\n  '港': '港振興業', '港振': '港振興業', 'コウシン': '港振興業',\n  '梶原': '梶原通信', 'ジースタイル': 'G-STYLE', 'Gスタイル': 'G-STYLE'\n};\n\nconst resolveAlias = (name) => {\n  for (const [alias, full] of Object.entries(COMPANY_ALIASES)) {\n    if (normalize(name).includes(normalize(alias))) return full;\n  }\n  return name;\n};\n\nconst parts = (data.parsedDate || '').split('/');\nconst year  = parseInt(parts[0]) || 0;\nconst month = parseInt(parts[1]) || 0;\nconst day   = parseInt(parts[2]) || 0;\n\nconst billingSites = (data.sites || []).filter(site => {\n  const resolved = resolveAlias(site.companyName);\n  const norm = normalize(resolved);\n  return BILLING_COMPANIES.some(c => norm.includes(normalize(c)) || normalize(c).includes(norm));\n});\n\nif (billingSites.length === 0) {\n  return [{ json: { ...data, hasBilling: false } }];\n}\n\nconst groups = {};\nfor (const site of billingSites) {\n  const resolved = resolveAlias(site.companyName);\n  const norm = normalize(resolved);\n  const is20 = CLOSING_20.some(c => norm.includes(normalize(c)) || normalize(c).includes(norm));\n  let bYear = year, bMonth = month;\n  if (is20 && day >= 21) {\n    bMonth = month + 1;\n    if (bMonth > 12) { bMonth = 1; bYear = year + 1; }\n  }\n  const key = `${bYear}-${bMonth}`;\n  if (!groups[key]) groups[key] = { bYear, bMonth, sites: [] };\n  groups[key].sites.push({ ...site, companyName: resolved });\n}\n\nconst results = [];\nfor (const group of Object.values(groups)) {\n  const billingFileName = `請求集計_${group.bYear}年${String(group.bMonth).padStart(2,'0')}月`;\n  results.push({ json: { ...data, billingYear: group.bYear, billingMonth: group.bMonth, billingFileName, billingSites: group.sites, hasBilling: true } });\n}\nreturn results;\n"
+      }
+    },
+    {
+      "id": "d3f2d3d5",
+      "name": "請求集計チェック",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        600
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond_billing",
+              "leftValue": "={{ $json.hasBilling }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2fa7f7ba",
+      "name": "請求集計スプレッドシート検索",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        600
+      ],
+      "parameters": {
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "=name='{{ $json.billingFileName }}' and mimeType='application/vnd.google-apps.spreadsheet'"
+            },
+            {
+              "name": "spaces",
+              "value": "drive"
+            },
+            {
+              "name": "fields",
+              "value": "files(id,name)"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "dac71185",
+      "name": "請求集計データ合流",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        2860,
+        600
+      ],
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      }
+    },
+    {
+      "id": "3e404c22",
+      "name": "請求集計サイト展開",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        600
+      ],
+      "parameters": {
+        "jsCode": "\nconst data = $input.first().json;\nconst files = data.billingFiles || data.files || [];\nconst spreadsheetId = files.length > 0 ? files[0].id : null;\nif (!spreadsheetId) throw new Error(`請求集計スプレッドシートが見つかりません: ${data.billingFileName}`);\n\nconst normalize = (name) =>\n  (name || '').replace(/株式会社|有限会社|合同会社|一般社団法人|一般財団法人/g, '').trim();\n\nconst results = [];\nfor (const site of (data.billingSites || [])) {\n  const sheetName = normalize(site.companyName);\n  const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}:append`;\n  const rowValues = [\n    data.parsedDate,\n    site.kubun || '',\n    site.propertyName || '',\n    data.employeeName,\n    site.highwayFee || 0,\n    site.distance || 0,\n    site.parkingFee || 0\n  ];\n  results.push({ json: {\n    ...data,\n    billingSpreadsheetId: spreadsheetId,\n    billingSheetName: sheetName,\n    appendUrl,\n    requestBody: { values: [rowValues] }\n  }});\n}\nreturn results;\n"
+      }
+    },
+    {
+      "id": "b8199969",
+      "name": "請求集計行追加",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3300,
+        600
+      ],
+      "parameters": {
+        "url": "={{ $json.appendUrl }}",
+        "method": "POST",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "USER_ENTERED"
+            },
+            {
+              "name": "insertDataOption",
+              "value": "INSERT_ROWS"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "772a33de",
+      "name": "野添通知",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3520,
+        600
+      ],
+      "parameters": {
+        "jsCode": "\nconst lineToken = 'Bearer YOUR_LINE_CHANNEL_ACCESS_TOKEN';\nconst NOZOE_ID = 'Uc1e1e958fb952752c3d34628a17585a1';\nconst data = $input.first().json;\n\nconst companyNames = (data.billingSites || []).map(s => s.companyName).join('、');\nconst msg = data.billingFileName\n  ? `請求集計を更新しました\\nファイル: ${data.billingFileName}\\n担当: ${data.employeeName}\\n対象会社: ${companyNames}`\n  : '請求集計を更新しました';\n\nawait this.helpers.httpRequest({\n  method: 'POST',\n  url: 'https://api.line.me/v2/bot/message/push',\n  headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n  body: { to: NOZOE_ID, messages: [{ type: 'text', text: msg }] },\n  json: true\n});\nreturn [{ json: { done: true } }];\n"
+      }
+    },
+    {
+      "id": "7434b6c4",
+      "name": "請求集計準備",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        900
+      ],
+      "parameters": {
+        "jsCode": "\nconst data = $input.first().json;\nconst now = new Date();\nconst curYear = now.getFullYear();\nconst curMonth = now.getMonth() + 1;\nlet prevYear = curYear, prevMonth = curMonth - 1;\nif (prevMonth === 0) { prevMonth = 12; prevYear = curYear - 1; }\n\nconst curFileName  = `請求集計_${curYear}年${String(curMonth).padStart(2,'0')}月`;\nconst prevFileName = `請求集計_${prevYear}年${String(prevMonth).padStart(2,'0')}月`;\n\nreturn [{ json: { ...data, curFileName, prevFileName, curYear, curMonth, prevYear, prevMonth } }];\n"
+      }
+    },
+    {
+      "id": "d4247d43",
+      "name": "請求集計スプレッドシート検索（当月）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        900
+      ],
+      "parameters": {
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "=name='{{ $json.curFileName }}' and mimeType='application/vnd.google-apps.spreadsheet'"
+            },
+            {
+              "name": "spaces",
+              "value": "drive"
+            },
+            {
+              "name": "fields",
+              "value": "files(id,name)"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "080f0900",
+      "name": "請求集計データ合流（当月）",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1540,
+        900
+      ],
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      }
+    },
+    {
+      "id": "504a760f",
+      "name": "当月スプレッドシートID保存",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        900
+      ],
+      "parameters": {
+        "jsCode": "\nconst data = $input.first().json;\nconst files = data.files || [];\nconst curSpreadsheetId = files.length > 0 ? files[0].id : null;\nreturn [{ json: { ...data, curSpreadsheetId } }];\n"
+      }
+    },
+    {
+      "id": "2252d148",
+      "name": "請求集計スプレッドシート検索（前月）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        800
+      ],
+      "parameters": {
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "=name='{{ $json.prevFileName }}' and mimeType='application/vnd.google-apps.spreadsheet'"
+            },
+            {
+              "name": "spaces",
+              "value": "drive"
+            },
+            {
+              "name": "fields",
+              "value": "files(id,name)"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "09e8473b",
+      "name": "請求集計データ合流（前月）",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        2200,
+        900
+      ],
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      }
+    },
+    {
+      "id": "1cdb19b8",
+      "name": "前月スプレッドシートID保存",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        900
+      ],
+      "parameters": {
+        "jsCode": "\nconst data = $input.first().json;\nconst files = data.files || [];\nconst prevSpreadsheetId = files.length > 0 ? files[0].id : null;\nreturn [{ json: { ...data, prevSpreadsheetId } }];\n"
+      }
+    },
+    {
+      "id": "94fca1b6",
+      "name": "請求集計処理",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        900
+      ],
+      "parameters": {
+        "jsCode": "\nconst data = $input.first().json;\nconst lines = ['【請求集計ファイル確認】'];\nif (data.curSpreadsheetId) {\n  lines.push(`✓ ${data.curFileName} (当月)`);\n} else {\n  lines.push(`✗ ${data.curFileName} (当月) - 未作成`);\n}\nif (data.prevSpreadsheetId) {\n  lines.push(`✓ ${data.prevFileName} (前月)`);\n} else {\n  lines.push(`✗ ${data.prevFileName} (前月) - 未作成`);\n}\nlines.push('');\nlines.push('詳細は直接スプレッドシートをご確認ください。');\nreturn [{ json: { ...data, replyMessage: lines.join('\\n') } }];\n"
+      }
+    },
+    {
+      "id": "ee972e40",
+      "name": "LINE返信（請求集計）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        900
+      ],
+      "parameters": {
+        "jsCode": "\nconst lineToken = 'Bearer YOUR_LINE_CHANNEL_ACCESS_TOKEN';\nconst data = $input.first().json;\nif (data.replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n    body: { replyToken: data.replyToken, messages: [{ type: 'text', text: data.replyMessage }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];\n"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Webhook応答",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "LINEメッセージ解析",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LINEメッセージ解析": {
+      "main": [
+        [
+          {
+            "node": "バリデーション確認",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "バリデーション確認": {
+      "main": [
+        [
+          {
+            "node": "メッセージタイプ判定",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "LINE返信（バリデーションエラー）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "メッセージタイプ判定": {
+      "main": [
+        [
+          {
+            "node": "Claude API呼び出し",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "請求集計準備",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude API呼び出し": {
+      "main": [
+        [
+          {
+            "node": "Claude解析結果処理",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude解析結果処理": {
+      "main": [
+        [
+          {
+            "node": "解析バリデーション",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "解析バリデーション": {
+      "main": [
+        [
+          {
+            "node": "成功返信生成",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "スプレッドシート検索",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "データ合流",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "LINE返信（エラー）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "成功返信生成": {
+      "main": [
+        [
+          {
+            "node": "LINE返信（成功）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "スプレッドシート検索": {
+      "main": [
+        [
+          {
+            "node": "データ合流",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "データ合流": {
+      "main": [
+        [
+          {
+            "node": "サイト展開",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "請求集計書き込み準備",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "サイト展開": {
+      "main": [
+        [
+          {
+            "node": "行追加準備",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "行追加準備": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets行追加",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計書き込み準備": {
+      "main": [
+        [
+          {
+            "node": "請求集計チェック",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計チェック": {
+      "main": [
+        [
+          {
+            "node": "請求集計スプレッドシート検索",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "請求集計データ合流",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "請求集計スプレッドシート検索": {
+      "main": [
+        [
+          {
+            "node": "請求集計データ合流",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計データ合流": {
+      "main": [
+        [
+          {
+            "node": "請求集計サイト展開",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計サイト展開": {
+      "main": [
+        [
+          {
+            "node": "請求集計行追加",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計行追加": {
+      "main": [
+        [
+          {
+            "node": "野添通知",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計準備": {
+      "main": [
+        [
+          {
+            "node": "請求集計スプレッドシート検索（当月）",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "請求集計データ合流（当月）",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "請求集計スプレッドシート検索（当月）": {
+      "main": [
+        [
+          {
+            "node": "請求集計データ合流（当月）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計データ合流（当月）": {
+      "main": [
+        [
+          {
+            "node": "当月スプレッドシートID保存",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "当月スプレッドシートID保存": {
+      "main": [
+        [
+          {
+            "node": "請求集計スプレッドシート検索（前月）",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "請求集計データ合流（前月）",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "請求集計スプレッドシート検索（前月）": {
+      "main": [
+        [
+          {
+            "node": "請求集計データ合流（前月）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計データ合流（前月）": {
+      "main": [
+        [
+          {
+            "node": "前月スプレッドシートID保存",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "前月スプレッドシートID保存": {
+      "main": [
+        [
+          {
+            "node": "請求集計処理",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "請求集計処理": {
+      "main": [
+        [
+          {
+            "node": "LINE返信（請求集計）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "v4-phase1"
+}
