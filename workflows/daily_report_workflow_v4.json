@@ -605,39 +605,7 @@
         400
       ],
       "parameters": {
-        "jsCode": "\nconst data = $input.first().json;\nconst existingValues = data.values || [];\nconst parsedDate = data.parsedDate;\n\n// 3行目以降が実データ（1〜2行目はヘッダー）\nconst dataRows = existingValues.slice(2);\nconst isDuplicate = dataRows.some(row => row[0] === parsedDate);\n\nif (isDuplicate) {\n  return [{ json: { ...data, isDuplicate: true, reason: `${parsedDate}の日報はすでに送信済みです` } }];\n}\nreturn [{ json: { ...data, isDuplicate: false } }];\n"
-      }
-    },
-    {
-      "id": "dup_judge",
-      "name": "重複判定",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        3088,
-        400
-      ],
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "cond_dup",
-              "leftValue": "={{ $json.isDuplicate }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "equal"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
+        "jsCode": "\nconst data = $input.first().json;\nconst existingValues = data.values || [];\nconst parsedDate = data.parsedDate; // 例: \"2026/05/02\"\nconst lineToken = 'Bearer YOUR_LINE_CHANNEL_ACCESS_TOKEN';\n\n// 3行目以降が実データ（1〜2行目はヘッダー）\nconst dataRows = existingValues.slice(2);\n\n// 日付フォーマット正規化して比較\nconst normalize = (d) => (d || '').toString().replace(/[\\-\\.]/g, '/').trim();\nconst isDuplicate = dataRows.some(row => normalize(row[0]) === normalize(parsedDate));\n\nif (isDuplicate) {\n  if (data.replyToken) {\n    try {\n      await this.helpers.httpRequest({\n        method: 'POST',\n        url: 'https://api.line.me/v2/bot/message/reply',\n        headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n        body: { replyToken: data.replyToken, messages: [{ type: 'text', text: `${parsedDate}の日報はすでに送信済みです。\\n重複データは記録されませんでした。` }] },\n        json: true\n      });\n    } catch(e) {}\n  }\n  throw new Error(`重複: ${parsedDate}の日報は送信済み`);\n}\n\nreturn [{ json: { ...data } }];\n"
       }
     },
     {
@@ -996,24 +964,6 @@
     },
     "重複チェック": {
       "main": [
-        [
-          {
-            "node": "重複判定",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "重複判定": {
-      "main": [
-        [
-          {
-            "node": "LINE返信（重複エラー）",
-            "type": "main",
-            "index": 0
-          }
-        ],
         [
           {
             "node": "サイト展開",
