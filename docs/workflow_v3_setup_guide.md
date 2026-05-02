@@ -55,14 +55,15 @@ n8nエディタで：
 
 ### 3. LINE userId の登録
 
-`LINEメッセージ解析` ノードを開いて、`EMPLOYEE_MAP` の `REPLACE_*_USERID` を実際のLINE userIDに置き換え：
+`LINEメッセージ解析` ノードを開いて、残りの `REPLACE_*_USERID` を実際のLINE userIDに置き換え：
 
 ```javascript
-"REPLACE_IMOTO_USERID":  "井本貴史",
 "REPLACE_LLS_USERID":    "LLS電気",
 "REPLACE_TRUST_USERID":  "株式会社トラストテクノス",
 "REPLACE_RISE_USERID":   "株式会社RISE"
 ```
+
+※ 井本貴士（Uf97fd2e35007f697094a9520e1baeafd）はワークフローに登録済み
 
 ### 4. Webhook URLの確認
 
