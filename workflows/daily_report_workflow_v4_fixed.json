@@ -140,7 +140,7 @@
           "parameters": [
             {
               "name": "q",
-              "value": "=name='{{ $json.fileName }}' and mimeType='application/vnd.google-apps.spreadsheet'"
+              "value": "=name='{{ $json.fileName }}' and mimeType='application/vnd.google-apps.spreadsheet' and '1jIj_o7DXsVvDMszZNRReaPU0TWvhEnwv' in parents"
             },
             {
               "name": "spaces",
