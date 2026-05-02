@@ -53,7 +53,7 @@
         700
       ],
       "parameters": {
-        "jsCode": "\nconst lineToken = 'Bearer YOUR_LINE_CHANNEL_ACCESS_TOKEN';\nconst data = $input.first().json;\nconst msg = `日報の解析に失敗しました。\\n理由: ${data.reason || '不明なエラー'}\\nもう一度送信してください。`;\nif (data.replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n    body: { replyToken: data.replyToken, messages: [{ type: 'text', text: msg }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];\n"
+        "jsCode": "\nconst lineToken = 'Bearer DKt6qGilWRHXrKlH9W6OTHsIStuvR9BQ9h+DG7LN/5Iit59+sk1wNF+rGWOD9SX687OmB/TF5jpNnXkDSiR31Rm23yc0aLJFzL93ljoBHvUQOrS14Pi2d5ixBmlrG5VJh0vpGuno4BAaIu35GsL0NwdB04t89/1O/w1cDnyilFU=';\nconst data = $input.first().json;\nconst msg = `日報の解析に失敗しました。\\n理由: ${data.reason || '不明なエラー'}\\nもう一度送信してください。`;\nif (data.replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n    body: { replyToken: data.replyToken, messages: [{ type: 'text', text: msg }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];\n"
       }
     },
     {
@@ -156,7 +156,7 @@
         600
       ],
       "parameters": {
-        "jsCode": "\nconst lineToken = 'Bearer YOUR_LINE_CHANNEL_ACCESS_TOKEN';\nconst data = $input.first().json;\nconst msg = `日報の解析に失敗しました。\\n理由: ${data.reason || '不明なエラー'}\\nもう一度送信してください。`;\nif (data.replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n    body: { replyToken: data.replyToken, messages: [{ type: 'text', text: msg }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];\n"
+        "jsCode": "\nconst lineToken = 'Bearer DKt6qGilWRHXrKlH9W6OTHsIStuvR9BQ9h+DG7LN/5Iit59+sk1wNF+rGWOD9SX687OmB/TF5jpNnXkDSiR31Rm23yc0aLJFzL93ljoBHvUQOrS14Pi2d5ixBmlrG5VJh0vpGuno4BAaIu35GsL0NwdB04t89/1O/w1cDnyilFU=';\nconst data = $input.first().json;\nconst msg = `日報の解析に失敗しました。\\n理由: ${data.reason || '不明なエラー'}\\nもう一度送信してください。`;\nif (data.replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n    body: { replyToken: data.replyToken, messages: [{ type: 'text', text: msg }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];\n"
       }
     },
     {
@@ -182,7 +182,7 @@
         200
       ],
       "parameters": {
-        "jsCode": "\nconst lineToken = 'Bearer YOUR_LINE_CHANNEL_ACCESS_TOKEN';\nconst data = $input.first().json;\nif (data.replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n    body: { replyToken: data.replyToken, messages: [{ type: 'text', text: data.replyMessage }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];\n"
+        "jsCode": "\nconst lineToken = 'Bearer DKt6qGilWRHXrKlH9W6OTHsIStuvR9BQ9h+DG7LN/5Iit59+sk1wNF+rGWOD9SX687OmB/TF5jpNnXkDSiR31Rm23yc0aLJFzL93ljoBHvUQOrS14Pi2d5ixBmlrG5VJh0vpGuno4BAaIu35GsL0NwdB04t89/1O/w1cDnyilFU=';\nconst data = $input.first().json;\nif (data.replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n    body: { replyToken: data.replyToken, messages: [{ type: 'text', text: data.replyMessage }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];\n"
       }
     },
     {
@@ -288,8 +288,10 @@
         },
         "sendBody": true,
         "bodyContentType": "json",
-        "jsonBody": "={{ $json.requestBody }}",
-        "options": {}
+        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
+        "options": {},
+        "contentType": "json",
+        "specifyBody": "json"
       }
     },
     {
@@ -427,8 +429,10 @@
         },
         "sendBody": true,
         "bodyContentType": "json",
-        "jsonBody": "={{ $json.requestBody }}",
-        "options": {}
+        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
+        "options": {},
+        "contentType": "json",
+        "specifyBody": "json"
       }
     },
     {
@@ -441,7 +445,7 @@
         600
       ],
       "parameters": {
-        "jsCode": "\nconst lineToken = 'Bearer YOUR_LINE_CHANNEL_ACCESS_TOKEN';\nconst NOZOE_ID = 'Uc1e1e958fb952752c3d34628a17585a1';\nconst data = $input.first().json;\n\nconst companyNames = (data.billingSites || []).map(s => s.companyName).join('、');\nconst msg = data.billingFileName\n  ? `請求集計を更新しました\\nファイル: ${data.billingFileName}\\n担当: ${data.employeeName}\\n対象会社: ${companyNames}`\n  : '請求集計を更新しました';\n\nawait this.helpers.httpRequest({\n  method: 'POST',\n  url: 'https://api.line.me/v2/bot/message/push',\n  headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n  body: { to: NOZOE_ID, messages: [{ type: 'text', text: msg }] },\n  json: true\n});\nreturn [{ json: { done: true } }];\n"
+        "jsCode": "\nconst lineToken = 'Bearer DKt6qGilWRHXrKlH9W6OTHsIStuvR9BQ9h+DG7LN/5Iit59+sk1wNF+rGWOD9SX687OmB/TF5jpNnXkDSiR31Rm23yc0aLJFzL93ljoBHvUQOrS14Pi2d5ixBmlrG5VJh0vpGuno4BAaIu35GsL0NwdB04t89/1O/w1cDnyilFU=';\nconst NOZOE_ID = 'Uc1e1e958fb952752c3d34628a17585a1';\nconst data = $input.first().json;\n\nconst companyNames = (data.billingSites || []).map(s => s.companyName).join('、');\nconst msg = data.billingFileName\n  ? `請求集計を更新しました\\nファイル: ${data.billingFileName}\\n担当: ${data.employeeName}\\n対象会社: ${companyNames}`\n  : '請求集計を更新しました';\n\nawait this.helpers.httpRequest({\n  method: 'POST',\n  url: 'https://api.line.me/v2/bot/message/push',\n  headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n  body: { to: NOZOE_ID, messages: [{ type: 'text', text: msg }] },\n  json: true\n});\nreturn [{ json: { done: true } }];\n"
       }
     },
     {
@@ -602,7 +606,7 @@
         900
       ],
       "parameters": {
-        "jsCode": "\nconst lineToken = 'Bearer YOUR_LINE_CHANNEL_ACCESS_TOKEN';\nconst data = $input.first().json;\nif (data.replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n    body: { replyToken: data.replyToken, messages: [{ type: 'text', text: data.replyMessage }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];\n"
+        "jsCode": "\nconst lineToken = 'Bearer DKt6qGilWRHXrKlH9W6OTHsIStuvR9BQ9h+DG7LN/5Iit59+sk1wNF+rGWOD9SX687OmB/TF5jpNnXkDSiR31Rm23yc0aLJFzL93ljoBHvUQOrS14Pi2d5ixBmlrG5VJh0vpGuno4BAaIu35GsL0NwdB04t89/1O/w1cDnyilFU=';\nconst data = $input.first().json;\nif (data.replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n    body: { replyToken: data.replyToken, messages: [{ type: 'text', text: data.replyMessage }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];\n"
       }
     }
   ],
@@ -936,5 +940,6 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "v4-phase1"
+  "versionId": "v4-phase1",
+  "id": "300"
 }
