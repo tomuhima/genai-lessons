@@ -165,7 +165,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1760,
+        2880,
         200
       ],
       "parameters": {
@@ -178,7 +178,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1980,
+        3100,
         200
       ],
       "parameters": {
@@ -239,7 +239,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2200,
+        3320,
         400
       ],
       "parameters": {
@@ -252,7 +252,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2420,
+        3540,
         400
       ],
       "parameters": {
@@ -265,7 +265,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2640,
+        3760,
         400
       ],
       "parameters": {
@@ -300,7 +300,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2200,
+        3320,
         600
       ],
       "parameters": {
@@ -608,6 +608,114 @@
       "parameters": {
         "jsCode": "\nconst lineToken = 'Bearer DKt6qGilWRHXrKlH9W6OTHsIStuvR9BQ9h+DG7LN/5Iit59+sk1wNF+rGWOD9SX687OmB/TF5jpNnXkDSiR31Rm23yc0aLJFzL93ljoBHvUQOrS14Pi2d5ixBmlrG5VJh0vpGuno4BAaIu35GsL0NwdB04t89/1O/w1cDnyilFU=';\nconst data = $input.first().json;\nif (data.replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n    body: { replyToken: data.replyToken, messages: [{ type: 'text', text: data.replyMessage }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];\n"
       }
+    },
+    {
+      "id": "dup_url_prep",
+      "name": "重複確認URL準備",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2208,
+        400
+      ],
+      "parameters": {
+        "jsCode": "\nconst data = $input.first().json;\nconst spreadsheetId = (data.files || [])[0]?.id;\nif (!spreadsheetId) throw new Error(`スプレッドシートが見つかりません: ${data.fileName}`);\nconst sheetName = data.employeeName;\nconst readUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A:A`;\nreturn [{ json: { ...data, spreadsheetId, readUrl } }];\n"
+      }
+    },
+    {
+      "id": "dup_data_get",
+      "name": "既存データ取得",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2432,
+        320
+      ],
+      "parameters": {
+        "url": "={{ $json.readUrl }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "EoASV9OF6Sq9t52P",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "dup_merge",
+      "name": "データ合流2",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        2640,
+        400
+      ],
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      }
+    },
+    {
+      "id": "dup_check",
+      "name": "重複チェック",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2864,
+        400
+      ],
+      "parameters": {
+        "jsCode": "\nconst data = $input.first().json;\nconst existingValues = data.values || [];\nconst parsedDate = data.parsedDate;\n\n// 3行目以降が実データ（1〜2行目はヘッダー）\nconst dataRows = existingValues.slice(2);\nconst isDuplicate = dataRows.some(row => row[0] === parsedDate);\n\nif (isDuplicate) {\n  return [{ json: { ...data, isDuplicate: true, reason: `${parsedDate}の日報はすでに送信済みです` } }];\n}\nreturn [{ json: { ...data, isDuplicate: false } }];\n"
+      }
+    },
+    {
+      "id": "dup_judge",
+      "name": "重複判定",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3088,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond_dup",
+              "leftValue": "={{ $json.isDuplicate }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "line_dup_error",
+      "name": "LINE返信（重複エラー）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3312,
+        200
+      ],
+      "parameters": {
+        "jsCode": "\nconst lineToken = 'Bearer YOUR_LINE_CHANNEL_ACCESS_TOKEN';\nconst data = $input.first().json;\nconst msg = `${data.parsedDate}の日報はすでに送信済みです。\\n重複データは記録されませんでした。\\n内容を確認してください。`;\nif (data.replyToken) {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.line.me/v2/bot/message/reply',\n    headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n    body: { replyToken: data.replyToken, messages: [{ type: 'text', text: msg }] },\n    json: true\n  });\n}\nreturn [{ json: { done: true } }];\n"
+      }
     }
   ],
   "connections": {
@@ -727,12 +835,7 @@
       "main": [
         [
           {
-            "node": "サイト展開",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "請求集計書き込み準備",
+            "node": "重複確認URL準備",
             "type": "main",
             "index": 0
           }
@@ -935,6 +1038,78 @@
         [
           {
             "node": "成功返信生成",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "重複確認URL準備": {
+      "main": [
+        [
+          {
+            "node": "既存データ取得",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "データ合流2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "既存データ取得": {
+      "main": [
+        [
+          {
+            "node": "データ合流2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "データ合流2": {
+      "main": [
+        [
+          {
+            "node": "重複チェック",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "重複チェック": {
+      "main": [
+        [
+          {
+            "node": "重複判定",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "重複判定": {
+      "main": [
+        [
+          {
+            "node": "LINE返信（重複エラー）",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "サイト展開",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "請求集計書き込み準備",
             "type": "main",
             "index": 0
           }
