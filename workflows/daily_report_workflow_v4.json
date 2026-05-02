@@ -111,39 +111,7 @@
         400
       ],
       "parameters": {
-        "jsCode": "\nconst data = $input.first().json;\nconst claudeText = data.claudeResponse || '';\n\nlet parsed;\ntry {\n  const match = claudeText.match(/\\{[\\s\\S]*\\}/);\n  if (!match) throw new Error('JSONが見つかりません');\n  parsed = JSON.parse(match[0]);\n} catch(e) {\n  return [{ json: { ...data, valid: false, reason: 'Claude解析失敗: ' + e.message } }];\n}\n\nif (!parsed.date || !parsed.sites || parsed.sites.length === 0) {\n  return [{ json: { ...data, valid: false, reason: '日付または現場情報が不足しています' } }];\n}\n\nconst dateParts = parsed.date.split('/');\nconst fileYear  = parseInt(dateParts[0]);\nconst fileMonth = parseInt(dateParts[1]);\nconst fileName  = `稼働表_${fileYear}年${String(fileMonth).padStart(2,'0')}月`;\n\nreturn [{ json: { ...data, parsedDate: parsed.date, sites: parsed.sites, valid: true, fileName, fileYear, fileMonth } }];\n"
-      }
-    },
-    {
-      "id": "9d02eb09",
-      "name": "解析バリデーション",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        1540,
-        400
-      ],
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "cond3",
-              "leftValue": "={{ $json.valid }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "equal"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
+        "jsCode": "\nconst data = $input.first().json;\nconst claudeText = data.claudeResponse || '';\nconst lineToken = 'Bearer YOUR_LINE_CHANNEL_ACCESS_TOKEN';\n\nconst sendLineError = async (msg) => {\n  if (data.replyToken) {\n    try {\n      await this.helpers.httpRequest({\n        method: 'POST',\n        url: 'https://api.line.me/v2/bot/message/reply',\n        headers: { 'Authorization': lineToken, 'Content-Type': 'application/json' },\n        body: { replyToken: data.replyToken, messages: [{ type: 'text', text: msg }] },\n        json: true\n      });\n    } catch(e) {}\n  }\n};\n\nlet parsed;\ntry {\n  const match = claudeText.match(/\\{[\\s\\S]*\\}/);\n  if (!match) throw new Error('JSONが見つかりません');\n  parsed = JSON.parse(match[0]);\n} catch(e) {\n  await sendLineError(`日報のフォーマットが認識できませんでした。\\n正しいフォーマットで送信してください。`);\n  throw new Error('日報フォーマットエラー: ' + e.message);\n}\n\nif (!parsed.date || !parsed.sites || parsed.sites.length === 0) {\n  await sendLineError(`日付または現場情報が記載されていません。\\n確認してもう一度送信してください。`);\n  throw new Error('日報バリデーションエラー: 日付または現場情報なし');\n}\n\nconst dateParts = parsed.date.split('/');\nconst fileYear  = parseInt(dateParts[0]);\nconst fileMonth = parseInt(dateParts[1]);\nconst fileName  = `稼働表_${fileYear}年${String(fileMonth).padStart(2,'0')}月`;\n\nreturn [{ json: { ...data, parsedDate: parsed.date, sites: parsed.sites, fileName, fileYear, fileMonth } }];\n"
       }
     },
     {
@@ -779,16 +747,10 @@
       "main": [
         [
           {
-            "node": "解析バリデーション",
+            "node": "成功返信生成",
             "type": "main",
             "index": 0
-          }
-        ]
-      ]
-    },
-    "解析バリデーション": {
-      "main": [
-        [
+          },
           {
             "node": "スプレッドシート検索",
             "type": "main",
@@ -798,13 +760,6 @@
             "node": "データ合流",
             "type": "main",
             "index": 1
-          }
-        ],
-        [
-          {
-            "node": "LINE返信（エラー）",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
