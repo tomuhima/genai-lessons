@@ -35,7 +35,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst body = $input.first().json.body;\nconst events = body?.events || [];\nif (events.length === 0) return [];\n\nconst event = events[0];\nconst userId = event.source?.userId || '';\nconst messageType_line = event.message?.type;\nconst replyToken = messageType_line === 'text' ? event.replyToken : '';\nconst messageText = event.message?.text || '';\n\nconst EMPLOYEE_MAP = {\n  \"Uc1e1e958fb952752c3d34628a17585a1\": \"野添優\",\n  \"Uf662ab811bee1780522da7356c0efb9e\": \"丸田翔吾\",\n  \"Ua9a65f01bf77adcc825b05811950480d\": \"源地健史\",\n  \"U65929805c0527b9f75b5276fc250c304\": \"服部秀一\",\n  \"Uadfb98160637cc7f96bccb051c4a51f9\": \"梶原通信\",\n  \"Uf97fd2e35007f697094a9520e1baeafd\": \"井本貴士\",\n  \"REPLACE_LLS_USERID\":               \"LLS電気\",\n  \"REPLACE_TRUST_USERID\":             \"株式会社トラストテクノス\",\n  \"REPLACE_RISE_USERID\":              \"株式会社RISE\"\n};\n\nconst employeeName = EMPLOYEE_MAP[userId];\n\n// 非テキスト or テキストなし → 何もせず終了\nif (messageType_line !== 'text' || !messageText.trim()) {\n  return [];\n}\n\n// 未登録ユーザー → messageType='invalid' で請求照会処理に流す（そこでエラー返信）\nif (!employeeName) {\n  return [{ json: { valid: false, reason: '未登録ユーザー', userId, replyToken, messageText, messageType: 'invalid' } }];\n}\n\nconst msgLower = messageText.toLowerCase();\nconst messageType = (msgLower.includes('請求') || msgLower.includes('集計') || /\\d月/.test(messageText) || msgLower.includes('今月') || msgLower.includes('先月'))\n  ? 'billing_query' : 'daily_report';\n\nreturn [{ json: { valid: true, userId, employeeName, messageText, replyToken, messageType } }];\n"
+        "jsCode": "\nconst body = $input.first().json.body;\nconst events = body?.events || [];\nif (events.length === 0) return [];\n\nconst event = events[0];\nconst userId = event.source?.userId || '';\nconst messageType_line = event.message?.type;\nconst replyToken = messageType_line === 'text' ? event.replyToken : '';\nconst messageText = event.message?.text || '';\n\nconst EMPLOYEE_MAP = {\n  \"Uc1e1e958fb952752c3d34628a17585a1\": \"野添優\",\n  \"Uf662ab811bee1780522da7356c0efb9e\": \"丸田翔吾\",\n  \"Ua9a65f01bf77adcc825b05811950480d\": \"源地健史\",\n  \"U65929805c0527b9f75b5276fc250c304\": \"服部秀一\",\n  \"Uadfb98160637cc7f96bccb051c4a51f9\": \"梶原通信\",\n  \"Uf97fd2e35007f697094a9520e1baeafd\": \"井本貴士\",\n  \"REPLACE_LLS_USERID\":               \"LLS電気\",\n  \"REPLACE_TRUST_USERID\":             \"株式会社トラストテクノス\",\n  \"REPLACE_RISE_USERID\":              \"株式会社RISE\"\n};\n\nconst employeeName = EMPLOYEE_MAP[userId];\n\nif (messageType_line !== 'text' || !messageText.trim()) {\n  return [];\n}\n\nif (!employeeName) {\n  return [{ json: { valid: false, reason: '未登録ユーザー', userId, replyToken, messageText, messageType: 'invalid' } }];\n}\n\n// メッセージタイプ判定（厳密）\nconst trimmed = messageText.trim();\nconst msgLower = trimmed.toLowerCase();\n\nlet messageType;\nif (trimmed.startsWith('日報')) {\n  messageType = 'daily_report';\n} else if (\n  msgLower.includes('請求') ||\n  msgLower.includes('集計') ||\n  /^\\s*今月\\s*$/.test(trimmed) ||\n  /^\\s*先月\\s*$/.test(trimmed) ||\n  /^\\s*\\d{1,2}月\\s*$/.test(trimmed) ||\n  /^\\s*\\d{4}年\\d{1,2}月\\s*$/.test(trimmed) ||\n  /^\\s*\\d{1,2}\\/\\d{4}\\s*$/.test(trimmed)\n) {\n  messageType = 'billing_query';\n} else {\n  // 不明：日報として扱う（Claudeが解析、失敗ならエラー返信）\n  messageType = 'daily_report';\n}\n\nreturn [{ json: { valid: true, userId, employeeName, messageText, replyToken, messageType } }];\n"
       },
       "id": "a88072f4",
       "name": "LINEメッセージ解析",
@@ -80,7 +80,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst data = $input.first().json;\nconst apiKey = 'YOUR_CLAUDE_API_KEY';\n\nconst systemPrompt = `あなたは日報解析AIです。以下のJSON形式で出力してください。\n{\n  \"date\": \"YYYY/MM/DD\",\n  \"sites\": [\n    {\n      \"companyName\": \"会社名（正式名称・半角）\",\n      \"propertyName\": \"物件名\",\n      \"kubun\": \"昼勤 or 夜勤\",\n      \"startTime\": \"HH:MM\",\n      \"endTime\": \"HH:MM\",\n      \"breakMinutes\": 60,\n      \"workHours\": \"H:MM\",\n      \"workContent\": \"作業内容\",\n      \"highwayFee\": 0,\n      \"distance\": 0,\n      \"parkingFee\": 0,\n      \"materialCost\": 0,\n      \"staffCount\": null,\n      \"staffNames\": null\n    }\n  ]\n}\n\n【正規化ルール】\n- 時刻：「8:30」「8.30」「8時30分」「8半」など全て「08:30」形式に変換\n- 全角英数字・記号は半角に変換（ＦＧＥ→FGE、ｍｔｒ→mtr、Ｇ−ＳＴＹＬＥ→G-STYLE）\n- 区分：「昼」「日勤」→「昼勤」、「夜」→「夜勤」\n\n【会社名の正式化（略称→正式名称）】\n- 平成 / ヘイセイ → 平成システム\n- トラスト → トラストテクノス\n- オーク / オークコム → オークコミュニケーション\n- 千里 → 千里スカイハイツ管理組合\n- 港 / 港振 / コウシン / コウシンギョウ → 港振興業\n- 梶原 → 梶原通信\n- ジースタイル / Gスタイル / G-STYLE → G-STYLE\n- FGE / ＦＧＥ → FGE\n- mtr / ｍｔｒ / MTR → mtr\n- ライズ → ライズ\n- 菊次 → 菊次\n- ページ → ページ\n\nstaffCount/staffNamesはMULTI_PERSON会社（梶原通信・LLS電気・トラストテクノス・RISE）のみ使用。\n未記載の数値項目（高速・距離・駐車場・資材費）は0としてください。`;\n\nconst response = await this.helpers.httpRequest({\n  method: 'POST',\n  url: 'https://api.anthropic.com/v1/messages',\n  headers: {\n    'x-api-key': apiKey,\n    'anthropic-version': '2023-06-01',\n    'content-type': 'application/json'\n  },\n  body: {\n    model: 'claude-haiku-4-5-20251001',\n    max_tokens: 1024,\n    system: systemPrompt,\n    messages: [{ role: 'user', content: data.messageText }]\n  },\n  json: true\n});\n\nconst claudeResponse = response.content?.[0]?.text || '';\nreturn [{ json: { ...data, claudeResponse } }];\n"
+        "jsCode": "\nconst data = $input.first().json;\nconst apiKey = 'YOUR_CLAUDE_API_KEY';\n\nconst systemPrompt = `あなたは日報解析AIです。以下のJSON形式で出力してください。\n{\n  \"date\": \"YYYY/MM/DD\",\n  \"sites\": [\n    {\n      \"companyName\": \"会社名（正式名称・半角）\",\n      \"propertyName\": \"物件名\",\n      \"kubun\": \"昼勤 or 夜勤\",\n      \"startTime\": \"HH:MM\",\n      \"endTime\": \"HH:MM\",\n      \"breakMinutes\": 60,\n      \"workHours\": \"H:MM\",\n      \"workContent\": \"作業内容\",\n      \"highwayFee\": 0,\n      \"distance\": 0,\n      \"parkingFee\": 0,\n      \"materialCost\": 0,\n      \"staffCount\": null,\n      \"staffNames\": null\n    }\n  ]\n}\n\n【正規化ルール】\n- 時刻：「8:30」「8.30」「8時30分」「8半」など全て「08:30」形式に変換\n- 全角英数字・記号は半角に変換（ＦＧＥ→FGE、ｍｔｒ→mtr、Ｇ−ＳＴＹＬＥ→G-STYLE）\n- 区分：「昼」「日勤」→「昼勤」、「夜」→「夜勤」\n\n【会社名の正式化（略称→正式名称）】\n- 平成 / ヘイセイ → 平成システム\n- トラスト → トラストテクノス\n- オーク / オークコム → オークコミュニケーション\n- 千里 → 千里スカイハイツ管理組合\n- 港 / 港振 / コウシン / コウシンギョウ → 港振興業\n- 梶原 → 梶原通信\n- ジースタイル / Gスタイル / G-STYLE → G-STYLE\n- FGE / ＦＧＥ → FGE\n- mtr / ｍｔｒ / MTR → mtr\n- ライズ → ライズ\n- 菊次 → 菊次\n- ページ → ページ\n\nstaffCount/staffNamesはMULTI_PERSON会社（梶原通信・LLS電気・トラストテクノス・RISE）のみ使用。\n未記載の数値項目（高速・距離・駐車場・資材費）は0としてください。`;\n\nconst response = await this.helpers.httpRequest({\n  method: 'POST',\n  url: 'https://api.anthropic.com/v1/messages',\n  headers: {\n    'x-api-key': apiKey,\n    'anthropic-version': '2023-06-01',\n    'content-type': 'application/json'\n  },\n  body: {\n    model: 'claude-haiku-4-5-20251001',\n    max_tokens: 2048,\n    system: systemPrompt,\n    messages: [{ role: 'user', content: data.messageText }]\n  },\n  json: true\n});\n\nconst claudeResponse = response.content?.[0]?.text || '';\nreturn [{ json: { ...data, claudeResponse } }];\n"
       },
       "id": "9a7e92ef",
       "name": "Claude API呼び出し",
@@ -282,7 +282,13 @@
         "url": "={{ $json.readUrl }}",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "googleSheetsOAuth2Api",
-        "options": {}
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
       },
       "id": "dup_data_get",
       "name": "既存データ取得",
@@ -297,7 +303,9 @@
           "id": "EoASV9OF6Sq9t52P",
           "name": "Google Sheets account"
         }
-      }
+      },
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
